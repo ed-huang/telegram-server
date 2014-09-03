@@ -1,5 +1,19 @@
 var express = require('express');
+var bodyParser = require('body-parser');
 var app = express();
+
+app.use(bodyParser.urlencoded({ extended: false }));
+
+// parse application/json
+app.use(bodyParser.json());
+
+// parse application/vnd.api+json as json
+app.use(bodyParser.json({ type: 'application/vnd.api+json' }));
+
+app.use(function (req, res, next) {
+  console.log('bp: ', req.body); // populated!
+  next();
+});
 
 var users = {
     'users': [
@@ -74,9 +88,21 @@ app.get('/api/posts', function (req, res) {
     res.send(posts);
 });
 
+app.post('/api/posts', function (req, res ) {
+       
+});
+
 app.get('/api/users', function (req, res) {
     res.send(users);
 });
+
+app.post('/api/users', function (req, res) {
+    
+});
+
+app.delete('/api/posts/:post_id', function(req, res) {});
+
+
 
 var server = app.listen(3000, function() {
     console.log('Serving on: ', server.address().port);
