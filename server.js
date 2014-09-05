@@ -101,29 +101,24 @@ app.post('/api/posts', function (req, res) {
 });
 
 app.get('/api/users', function (req, res) {
-//    console.log('req user: ', req.query.username, req.query.password);
+// check in array users for password and user
+// Send the user back to Ember. expecting back an array. so it will only an array with on user. 
 
     if (req.query.operation === 'login') {
         
         for (var i = 0; i < users.length; i++) {
             if (users[i].id === req.query.username) {
-                console.log('user array: ', users[i].id, req.query.username);
                 res.send( { users: [users[i]] } );
             }
         }
-        // check in array users for password and user
-        //var user = //find user in array. ;
-        // Send the user back to Ember. expecting back an array. so it will only an array with on user. 
-        // res.send( { users: [user] } );    
+
     } else {
         res.send({users: users});
-    }
-    
+    }    
 });
 
 app.post('/api/users', function (req, res) {
-    //user should be inputed into 
-    console.log('req: ', req.body.user);
+    
     users.push(req.body.user);
     res.send( { user: req.body.user } );
 
@@ -131,7 +126,6 @@ app.post('/api/users', function (req, res) {
 
 app.delete('/api/posts/:post_id', function(req, res) {
 
-    console.log('posts params: ', req.params.post_id, typeof(req.params.post_id));
     var index = parseInt(req.params.post_id);
 
     for (var i = 0, j = posts.length; i < j; i++) {
@@ -145,9 +139,6 @@ app.delete('/api/posts/:post_id', function(req, res) {
 });
 
 app.get('/api/users/:user_id', function (req, res) {
-    //look into user array. 
-    //req.params.user_id;
-    //res.send( { user: foundUser } );
 
     for (var i = 0, j = users.length; i < j; i++) {
         if (req.params.user_id === users[i].id) {
