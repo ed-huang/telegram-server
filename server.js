@@ -1,28 +1,137 @@
 var express = require('express');
+var session = require('express-session');
+var cookieParser = require('cookie-parser');
+
 var bodyParser = require('body-parser');
+
 var app = express();
+
 var logger = require('nlogger').logger(module);
 
-// var passport = require('passport');
-// var LocalStrategy = require('passport-local').Strategy;
+var passport = require('passport');
+var LocalStrategy = require('passport-local').Strategy;
 
 logger.info('info message');
 logger.debug('debug message');
 
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(cookieParser());
 
-// parse application/json
-app.use(bodyParser.json());
-
-// parse application/vnd.api+json as json
+app.use(bodyParser.urlencoded({ extended: false })); // parse application/json
+app.use(bodyParser.json()); // parse application/vnd.api+json as json
 app.use(bodyParser.json({ type: 'application/vnd.api+json' }));
 
-app.use(function (req, res, next) {
-  console.log('bp: ', req.body); // populated!
-  next();
+app.use(session({ secret: 'keyboard cat', resave: true, saveUninitialized: true }));
+app.use(passport.initialize());
+app.use(passport.session());
+
+
+
+
+app.get('/api/users',
+  passport.authenticate('local'),
+  function(req, res) {
+    // If this function gets called, authentication was successful.
+    // `req.user` contains the authenticated user.
+    res.send( { users: [req.user] } );
+  });
+
+
+passport.use(new LocalStrategy(
+    function (username, password, done) {
+        findOne( username, function (err, user) {
+            if (err) { 
+                return done(err); 
+            }
+            if (!user) { 
+                return done(null, false, { message: 'Incorrect username' } );
+            }
+            if (user.password !== password) {
+                return done(null, false, { message: 'Incorrect password.' } );
+            }
+            return done(null, user);
+        });
+    })
+);
+
+passport.serializeUser(function(user, done) {
+  done(null, user.id);
 });
 
-//Refactor 
+passport.deserializeUser(function(id, done) {
+  findOne(id, function(err, user) {
+    done(err, user);
+  });
+});
+
+app.get('/api/posts', function (req, res) {
+    res.send( { posts: posts } );
+});
+
+app.post('/api/posts', function (req, res) {
+    var id = posts.length + 1;
+    var post = {
+        id: id,
+        author: req.body.post.author,
+        text: req.body.post.text,
+        timestamp: req.body.post.timestamp
+    };
+
+    posts.push(post);
+    res.send( { post: post } );
+       
+});
+
+app.post('/api/users', function (req, res) {
+    
+    users.push(req.body.user);
+    res.send( { user: req.body.user } );
+
+});
+
+app.delete('/api/posts/:post_id', function(req, res) {
+
+    var index = parseInt(req.params.post_id);
+
+    for (var i = 0, j = posts.length; i < j; i++) {
+        
+        if (posts[i].id === index) {
+            posts.splice(i, 1);
+            break;
+        }
+    }
+    res.send({});
+});
+
+app.get('/api/users/:user_id', function (req, res) {
+
+    for (var i = 0, j = users.length; i < j; i++) {
+        if (req.params.user_id === users[i].id) {
+            res.send( { 'user': copyUser(users[i]) } );
+            break;
+        }
+    }
+});
+
+var findOne = function(username, fnc) {
+    for (var i = 0, j = users.length; i < j; i++) {
+        if (users[i].id === username) {
+            return fnc(null, users[i]);
+        } else {
+            return null;
+        }
+    }
+}
+
+var copyUser = function(obj) {
+    var extend = require('util')._extend;
+    var copy = extend(obj);
+    delete copy.password;
+    return copy;
+}
+
+var server = app.listen(3000, function() {
+    console.log('Serving on: ', server.address().port);
+});
 
 var users = [
     { 
@@ -77,80 +186,4 @@ var posts = [
         timestamp: '2014-08-22T14:06:00+08:00'
     }
 ];
-
-// app.post('/login', passport.authenticate('local'), function (req, res) {
-//     res.redirect('/users/' + req.user.username);
-// });
-
-app.get('/api/posts', function (req, res) {
-    res.send( { posts: posts } );
-});
-
-app.post('/api/posts', function (req, res) {
-    var id = posts.length + 1;
-    var post = {
-        id: id,
-        author: req.body.post.author,
-        text: req.body.post.text,
-        timestamp: req.body.post.timestamp
-    };
-
-    posts.push(post);
-    res.send( { post: post } );
-       
-});
-
-app.get('/api/users', function (req, res) {
-// check in array users for password and user
-// Send the user back to Ember. expecting back an array. so it will only an array with on user. 
-
-    if (req.query.operation === 'login') {
-        
-        for (var i = 0; i < users.length; i++) {
-            if (users[i].id === req.query.username) {
-                res.send( { users: [users[i]] } );
-            }
-        }
-
-    } else {
-        res.send({users: users});
-    }    
-});
-
-app.post('/api/users', function (req, res) {
-    
-    users.push(req.body.user);
-    res.send( { user: req.body.user } );
-
-});
-
-app.delete('/api/posts/:post_id', function(req, res) {
-
-    var index = parseInt(req.params.post_id);
-
-    for (var i = 0, j = posts.length; i < j; i++) {
-        
-        if (posts[i].id === index) {
-            posts.splice(i, 1);
-            break;
-        }
-    }
-    res.send({});
-});
-
-app.get('/api/users/:user_id', function (req, res) {
-
-    for (var i = 0, j = users.length; i < j; i++) {
-        if (req.params.user_id === users[i].id) {
-            res.send( { 'user': users[i] } );
-            break;
-        }
-    }
-});
-
-
-
-var server = app.listen(3000, function() {
-    console.log('Serving on: ', server.address().port);
-});
 
