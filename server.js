@@ -24,16 +24,31 @@ app.use(session({ secret: 'keyboard cat', resave: true, saveUninitialized: true 
 app.use(passport.initialize());
 app.use(passport.session());
 
+// app.get('/api/users', 
+//   passport.authenticate('local'),
+//   function(req, res) {
+//     // If this function gets called, authentication was successful.
+//     // `req.user` contains the authenticated user.
+//     res.send( { users: [req.user] } );
+//   });
+
+app.get('/api/users', function(req, res, next) {
+    if (req.query.operation === 'login') {
+        passport.authenticate('local', function(err, user, info) {
+            if (err) { return next(err); }
+            if (!user) { return res.redirect('/login'); }
+            req.logIn(user, function(err) {
+                if (err) { return next(err); }
+                return res.send( { users: [copyUser(req.user)] } );
+            });
+        })(req, res, next);    
+    } else {
+        return res.send({users: users});
+    }
+    
+});
 
 
-
-app.get('/api/users',
-  passport.authenticate('local'),
-  function(req, res) {
-    // If this function gets called, authentication was successful.
-    // `req.user` contains the authenticated user.
-    res.send( { users: [req.user] } );
-  });
 
 
 passport.use(new LocalStrategy(
