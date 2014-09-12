@@ -1,7 +1,9 @@
 var express = require('express');
 var session = require('express-session');
 var cookieParser = require('cookie-parser');
-
+var mongoose = require('mongoose');
+mongoose.connect('mongodb://localhost/test');
+//Library for mongoDB.
 var bodyParser = require('body-parser');
 
 var app = express();
@@ -16,40 +18,43 @@ logger.debug('debug message');
 
 app.use(cookieParser());
 
-app.use(bodyParser.urlencoded({ extended: false })); // parse application/json
+app.use(bodyParser.urlencoded({ extended: false })); // parse application/json // used for POST and parsed request.body
 app.use(bodyParser.json()); // parse application/vnd.api+json as json
 app.use(bodyParser.json({ type: 'application/vnd.api+json' }));
 
+//Encryption here with secret key 
 app.use(session({ secret: 'keyboard cat', resave: true, saveUninitialized: true }));
 app.use(passport.initialize());
 app.use(passport.session());
 
-// app.get('/api/users', 
-//   passport.authenticate('local'),
-//   function(req, res) {
-//     // If this function gets called, authentication was successful.
-//     // `req.user` contains the authenticated user.
-//     res.send( { users: [req.user] } );
-//   });
 
-app.get('/api/users', function(req, res, next) {
+app.get('/api/users', function(req, res) {
     if (req.query.operation === 'login') {
+        logger.info('user logging in: ', req.query.username);
         passport.authenticate('local', function(err, user, info) {
-            if (err) { return next(err); }
-            if (!user) { return res.redirect('/login'); }
+            //Called by done(x,y,z);
+            //Middleware functions that take CookieParser -> NEXT -> BodyParser ->Session etc.. 
+            //end()  - send response
+            if (err) { return res.status(500).end(); }
+            //send 404 should only provide data. agnostic to the client
+            // if (!user) { return res.redirect('/login'); }
+            if (!user) { return res.status(404).end(); }
+            //logIn sets the cookie. 
+            logger.info("this is user: ", user);
             req.logIn(user, function(err) {
-                if (err) { return next(err); }
+                if (err) { return res.status(500).end(); }
                 return res.send( { users: [copyUser(req.user)] } );
             });
-        })(req, res, next);    
+        })(req, res);    
     } else {
-        return res.send({users: users});
+        var usersCopy = users;
+        for (var i = 0, j = users.length; i < j; i++) {
+            delete users[i].password;
+        }
+        return res.send( { users: usersCopy } );
     }
     
 });
-
-
-
 
 passport.use(new LocalStrategy(
     function (username, password, done) {
@@ -69,6 +74,7 @@ passport.use(new LocalStrategy(
 );
 
 passport.serializeUser(function(user, done) {
+    //passes in unique key
   done(null, user.id);
 });
 
@@ -83,10 +89,13 @@ app.get('/api/posts', function (req, res) {
 });
 
 app.post('/api/posts', function (req, res) {
+    logger.info('posts function');
+    console.log(req.body.post.author, " sent post.");
+    console.log("user is authenticated: ", req.isAuthenticated());
     var id = posts.length + 1;
     var post = {
         id: id,
-        author: req.body.post.author,
+        author: req.body.post.author,//THIS IS FROM BODY PARSER
         text: req.body.post.text,
         timestamp: req.body.post.timestamp
     };
@@ -99,7 +108,14 @@ app.post('/api/posts', function (req, res) {
 app.post('/api/users', function (req, res) {
     
     users.push(req.body.user);
-    res.send( { user: req.body.user } );
+    //logIn(user) set the coookie.
+    logger.info('Create User: ', req.body.user);
+    req.login(req.body.user, function(err) {
+        if (err) { return res.status(500).end(); }
+        logger.info('user authenticated: ', req.isAuthenticated());
+        return res.send( { user: copyUser(req.body.user) } );
+    });
+    // res.send( { user: req.body.user } );
 
 });
 
@@ -107,7 +123,7 @@ app.delete('/api/posts/:post_id', function(req, res) {
 
     var index = parseInt(req.params.post_id);
 
-    for (var i = 0, j = posts.length; i < j; i++) {
+    for (var i = 0; i < posts.length; i++) {
         
         if (posts[i].id === index) {
             posts.splice(i, 1);
@@ -138,10 +154,14 @@ var findOne = function(username, fnc) {
 }
 
 var copyUser = function(obj) {
-    var extend = require('util')._extend;
-    var copy = extend(obj);
-    delete copy.password;
+    var copy = {
+        id: obj.id,
+        name: obj.name,
+        picture: '/assets/images/cristian-strat.png'
+    };
     return copy;
+    // var extend = require('util')._extend; //private should be somewhere inside. Better way is to just create an object. instead of using copy fuction. 
+    
 }
 
 var server = app.listen(3000, function() {
