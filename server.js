@@ -23,12 +23,17 @@ app.use(bodyParser.json()); // parse application/vnd.api+json as json
 app.use(bodyParser.json({ type: 'application/vnd.api+json' }));
 
 //Encryption here with secret key 
-app.use(session({ secret: 'keyboard cat', resave: true, saveUninitialized: true }));
+app.use(session({ secret: 'keyboard cat', resave: true, saveUninitialized: true, rolling: true }));
 app.use(passport.initialize());
 app.use(passport.session());
 
 
+/**
+* User LOGIN or get users. Used for following and follower stream
+*/
+
 app.get('/api/users', function(req, res) {
+    logger.info('GET users');
     if (req.query.operation === 'login') {
         logger.info('user logging in: ', req.query.username);
         passport.authenticate('local', function(err, user, info) {
@@ -41,23 +46,33 @@ app.get('/api/users', function(req, res) {
             if (!user) { return res.status(404).end(); }
             //logIn sets the cookie. 
             logger.info("this is user: ", user);
-            req.logIn(user, function(err) {
+            req.logIn(copyUser(user), function(err) {
                 if (err) { return res.status(500).end(); }
-                return res.send( { users: [copyUser(req.user)] } );
+                return res.send( { users: [copyUser(user)] } );
             });
         })(req, res);    
-    } else {
-        var usersCopy = users;
-        for (var i = 0, j = users.length; i < j; i++) {
-            delete users[i].password;
+    } else if (req.query.operation === 'authenticating') {
+        logger.info('isAuthenticated: ', req.isAuthenticated());
+        if (req.isAuthenticated()) {
+            return res.send( { users:[req.user] });
+        } else {
+            return res.send( { users: [] } );    
         }
-        return res.send( { users: usersCopy } );
+        
+    } else {
+        return res.send( { users: [] } );
     }
-    
 });
+
+
+/**
+* This is the local stratgey used by Passport.
+* Passport can use different types of strategies. 
+*/
 
 passport.use(new LocalStrategy(
     function (username, password, done) {
+        logger.info('local strategy');
         findOne( username, function (err, user) {
             if (err) { 
                 return done(err); 
@@ -73,7 +88,22 @@ passport.use(new LocalStrategy(
     })
 );
 
+/**
+* In a typical web application, 
+* the credentials used to authenticate a user 
+* will only be transmitted during the login request. req.login()
+* If authentication succeeds, 
+* a session will be established and maintained via a cookie set in the user's browser.
+*/
+
+/**
+* Serialize is called by req.login. 
+* It takes in user instances to be used for sessions. 
+* The following uses user.id (this is used to keep data in the session small).
+*/
+
 passport.serializeUser(function(user, done) {
+    logger.info('serialized!!');
     //passes in unique key
   done(null, user.id);
 });
@@ -84,14 +114,21 @@ passport.deserializeUser(function(id, done) {
   });
 });
 
+
+/**
+* Requesting posts from the Posts Stream
+* dashboard GET()
+*/
+
 app.get('/api/posts', function (req, res) {
+    logger.info('GET on /api/posts');
     res.send( { posts: posts } );
 });
 
-app.post('/api/posts', function (req, res) {
-    logger.info('posts function');
-    console.log(req.body.post.author, " sent post.");
-    console.log("user is authenticated: ", req.isAuthenticated());
+
+
+app.post('/api/posts', ensureAuthenticated, function (req, res) {
+    logger.info('posts');
     var id = posts.length + 1;
     var post = {
         id: id,
@@ -99,24 +136,30 @@ app.post('/api/posts', function (req, res) {
         text: req.body.post.text,
         timestamp: req.body.post.timestamp
     };
-
-    posts.push(post);
-    res.send( { post: post } );
-       
+    if (req.user.id === post.author) {
+        logger.info('id and author passed');
+        posts.push(post);
+        res.send( { post: post } );    
+    } else {
+        return res.status(403).end();
+    }
 });
 
 app.post('/api/users', function (req, res) {
-    
-    users.push(req.body.user);
-    //logIn(user) set the coookie.
-    logger.info('Create User: ', req.body.user);
-    req.login(req.body.user, function(err) {
-        if (err) { return res.status(500).end(); }
-        logger.info('user authenticated: ', req.isAuthenticated());
-        return res.send( { user: copyUser(req.body.user) } );
-    });
-    // res.send( { user: req.body.user } );
-
+    logger.info('POST to api/users');
+    if (req.body.user) {
+        users.push(req.body.user);
+        logger.info('Create User: ', copyUser(req.body.user));
+        
+        req.login(req.body.user, function(err) {
+            logger.info('req.login');
+            if (err) { return res.status(500).end(); }
+            return res.send( { user: copyUser(req.body.user) } );
+        });    
+    } else {
+        logger.debug('signUp error: ', req.body.user);
+        res.status(403).end();
+    }
 });
 
 app.delete('/api/posts/:post_id', function(req, res) {
@@ -143,17 +186,23 @@ app.get('/api/users/:user_id', function (req, res) {
     }
 });
 
-var findOne = function(username, fnc) {
-    for (var i = 0, j = users.length; i < j; i++) {
+app.get('/api/logout', function (req, res) {
+    req.logout();
+    return res.status(200).end();
+});
+
+function findOne (username, fnc) {
+    logger.info('findOne');
+    for (var i = 0; i < users.length; i++) {
         if (users[i].id === username) {
+            logger.info('user found: ', username);
             return fnc(null, users[i]);
-        } else {
-            return null;
         }
     }
+    return func(null, {});
 }
 
-var copyUser = function(obj) {
+function copyUser (obj) {
     var copy = {
         id: obj.id,
         name: obj.name,
@@ -164,8 +213,18 @@ var copyUser = function(obj) {
     
 }
 
+function ensureAuthenticated (req, res, next) {
+    logger.debug('ensureAuthticated: ', req.isAuthenticated());
+    if (req.isAuthenticated()) {
+        logger.info('isAuthenticated');
+        return next();
+    } else {
+        return res.status(403);
+    }
+}
+
 var server = app.listen(3000, function() {
-    console.log('Serving on: ', server.address().port);
+    console.log('Serving on: ', server.address().port, '**************************************');
 });
 
 var users = [
