@@ -40,14 +40,23 @@ app.get('/api/users', function(req, res) {
             //Called by done(x,y,z);
             //Middleware functions that take CookieParser -> NEXT -> BodyParser ->Session etc.. 
             //end()  - send response
-            if (err) { return res.status(500).end(); }
+            if (err) { 
+                logger.error('Passport authenticate error in authenticating');
+                return res.status(500).end(); 
+            }
             //send 404 should only provide data. agnostic to the client
             // if (!user) { return res.redirect('/login'); }
-            if (!user) { return res.status(404).end(); }
+            if (!user) { 
+                return res.status(404).end(); 
+            }
             //logIn sets the cookie. 
             logger.info("this is user: ", user);
-            req.logIn(copyUser(user), function(err) {
-                if (err) { return res.status(500).end(); }
+            //server side
+            req.logIn(user, function(err) {
+                if (err) { 
+                    logger.error('Something wrong with res.login()');
+                    return res.status(500).end(); 
+                }
                 return res.send( { users: [copyUser(user)] } );
             });
         })(req, res);    
@@ -72,17 +81,21 @@ app.get('/api/users', function(req, res) {
 
 passport.use(new LocalStrategy(
     function (username, password, done) {
-        logger.info('local strategy');
+        logger.info('Using local strategy');
         findOne( username, function (err, user) {
             if (err) { 
+                logger.info('findOne returned error in local passport');
                 return done(err); 
             }
             if (!user) { 
+                logger.warn('User is incorrect.');
                 return done(null, false, { message: 'Incorrect username' } );
             }
             if (user.password !== password) {
+                logger.warn('Password is incorrect.');
                 return done(null, false, { message: 'Incorrect password.' } );
             }
+            logger.info('local returning user: ', user);
             return done(null, user);
         });
     })
@@ -128,7 +141,7 @@ app.get('/api/posts', function (req, res) {
 
 
 app.post('/api/posts', ensureAuthenticated, function (req, res) {
-    logger.info('posts');
+    logger.info('posts request');
     var id = posts.length + 1;
     var post = {
         id: id,
@@ -141,12 +154,14 @@ app.post('/api/posts', ensureAuthenticated, function (req, res) {
         posts.push(post);
         res.send( { post: post } );    
     } else {
+        logger.warning('user tried unauthorized post');
         return res.status(403).end();
     }
 });
 
+//POST is for 1st time creation
 app.post('/api/users', function (req, res) {
-    logger.info('POST to api/users');
+    logger.info('CREATE USER POST to api/users');
     if (req.body.user) {
         users.push(req.body.user);
         logger.info('Create User: ', copyUser(req.body.user));
@@ -180,10 +195,15 @@ app.get('/api/users/:user_id', function (req, res) {
 
     for (var i = 0, j = users.length; i < j; i++) {
         if (req.params.user_id === users[i].id) {
-            res.send( { 'user': copyUser(users[i]) } );
-            break;
+            return res.send( { 'user': copyUser(users[i]) } );
         }
     }
+
+    return res.status(404).end();
+
+    //no matter what happens must responde to client. 
+
+    //if nothing found res with 404
 });
 
 app.get('/api/logout', function (req, res) {
@@ -192,14 +212,16 @@ app.get('/api/logout', function (req, res) {
 });
 
 function findOne (username, fnc) {
-    logger.info('findOne');
+    logger.info('findOne function');
     for (var i = 0; i < users.length; i++) {
         if (users[i].id === username) {
             logger.info('user found: ', username);
             return fnc(null, users[i]);
         }
     }
-    return func(null, {});
+
+    //if empty dictionary should return null
+    logger.warn('findOne() user not found');
 }
 
 function copyUser (obj) {
@@ -213,6 +235,7 @@ function copyUser (obj) {
     
 }
 
+//is also a middleware
 function ensureAuthenticated (req, res, next) {
     logger.debug('ensureAuthticated: ', req.isAuthenticated());
     if (req.isAuthenticated()) {
