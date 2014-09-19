@@ -1,9 +1,15 @@
 var express = require('express');
 var session = require('express-session');
+
+/** 
+* Used by passport.js serializing data 
+*/
 var cookieParser = require('cookie-parser');
-var mongoose = require('mongoose');
-mongoose.connect('mongodb://localhost/test');
-//Library for mongoDB.
+
+/**
+* bodyParser - For parsing payloaods from post requests. 
+* Also used by passport.js
+*/
 var bodyParser = require('body-parser');
 
 var app = express();
@@ -13,8 +19,40 @@ var logger = require('nlogger').logger(module);
 var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
 
-logger.info('info message');
-logger.debug('debug message');
+var mongoose = require('mongoose');
+var ObjectId = mongoose.Schema.Types.ObjectId;
+    mongoose.connect('mongodb://localhost/test');
+
+var Schema = mongoose.Schema;
+
+var userSchema = new Schema( {
+ 
+    id: String,
+    name: String,
+    password: String,
+    picture: String
+    
+});
+
+var postSchema = new Schema( { 
+    id: Number,
+    author: { type: String, ref: 'User.id' },
+    text: String,
+    timestamp: Date
+});
+
+var User = mongoose.model('User', userSchema);
+var Post = mongoose.model('Post', postSchema);
+
+
+
+var db = mongoose.connection;
+
+
+db.on('error', console.error.bind(console, 'connection error:'));
+
+
+
 
 app.use(cookieParser());
 
@@ -135,10 +173,16 @@ passport.deserializeUser(function(id, done) {
 
 app.get('/api/posts', function (req, res) {
     logger.info('GET on /api/posts');
-    res.send( { posts: posts } );
+    Post.find({}, function (err, posts) {
+        if (err) return res.status(403).end();
+        return res.send( { posts: posts } );
+    });
 });
 
 
+/**
+* Creating a post. Most Likely from the dashboard.
+*/
 
 app.post('/api/posts', ensureAuthenticated, function (req, res) {
     logger.info('posts request');
@@ -151,6 +195,10 @@ app.post('/api/posts', ensureAuthenticated, function (req, res) {
     };
     if (req.user.id === post.author) {
         logger.info('id and author passed');
+        Post.create(post, function (err, post) {
+            if (err) return res.status(403).end();
+            logger.info('Post Record Created: ', post.text);
+        });
         posts.push(post);
         res.send( { post: post } );    
     } else {
@@ -159,25 +207,68 @@ app.post('/api/posts', ensureAuthenticated, function (req, res) {
     }
 });
 
-//POST is for 1st time creation
-app.post('/api/users', function (req, res) {
-    logger.info('CREATE USER POST to api/users');
-    if (req.body.user) {
-        users.push(req.body.user);
-        logger.info('Create User: ', copyUser(req.body.user));
+
+/**
+* CREATE USER - new user record.
+* POST is always used for creating a new record.
+*/
+
+// app.post('/api/users', function (req, res) {
+//     logger.info('CREATE USER POST to api/users');
+//     if (req.body.user) {
+//         users.push(req.body.user);
+//         logger.info('Create User: ', copyUser(req.body.user));
         
+//         req.login(req.body.user, function(err) {
+//             logger.info('req.login');
+//             if (err) { return res.status(500).end(); }
+//             return res.send( { user: copyUser(req.body.user) } );
+//         });    
+//     } else {
+//         logger.debug('signUp error: ', req.body.user);
+//         res.status(403).end();
+//     }
+// });
+
+
+app.post('/api/users', function (req, res) {
+    logger.info('CREATE USER - POST to api/users');
+
+    if (req.body.user) {
+        //create a new user document
+        var user = new User(req.body.user);
+        user.save(function (err) {
+            if (err) {
+                logger.error('document not created');
+                return res.status(403).end();
+            }
+            logger.info('document saved!');
+        });
+
+        User.create(req.body.user, function (err, user) {
+            if (err) return res.status(403).end();
+            logger.info('User Created: ', user.id);
+        });    
+
         req.login(req.body.user, function(err) {
             logger.info('req.login');
+
             if (err) { return res.status(500).end(); }
             return res.send( { user: copyUser(req.body.user) } );
-        });    
+        });
+
     } else {
         logger.debug('signUp error: ', req.body.user);
         res.status(403).end();
     }
 });
 
-app.delete('/api/posts/:post_id', function(req, res) {
+
+/**
+* Delete Post.
+*/
+
+app.delete('/api/posts/:post_id', ensureAuthenticated, function (req, res) {
 
     var index = parseInt(req.params.post_id);
 
@@ -191,15 +282,21 @@ app.delete('/api/posts/:post_id', function(req, res) {
     res.send({});
 });
 
+
+
 app.get('/api/users/:user_id', function (req, res) {
 
-    for (var i = 0, j = users.length; i < j; i++) {
-        if (req.params.user_id === users[i].id) {
-            return res.send( { 'user': copyUser(users[i]) } );
-        }
-    }
+    User.findOne({ user: req.params_user_id }, function (err, user) {
+        if (err) { return res.status(404).end() };
+        return res.send( { 'user': user });
+    });
+    // for (var i = 0, j = users.length; i < j; i++) {
+    //     if (req.params.user_id === users[i].id) {
+    //         return res.send( { 'user': copyUser(users[i]) } );
+    //     }
+    // }
 
-    return res.status(404).end();
+    // return res.status(404).end();
 
     //no matter what happens must responde to client. 
 
@@ -211,17 +308,36 @@ app.get('/api/logout', function (req, res) {
     return res.status(200).end();
 });
 
+// function findOne (username, fnc) {
+//     logger.info('findOne function');
+//     for (var i = 0; i < users.length; i++) {
+//         if (users[i].id === username) {
+//             logger.info('user found: ', username);
+//             return fnc(null, users[i]);
+//         }
+//     }
+
+//     //if empty dictionary should return null
+//     logger.warn('findOne() user not found');
+// }
+
 function findOne (username, fnc) {
     logger.info('findOne function');
-    for (var i = 0; i < users.length; i++) {
-        if (users[i].id === username) {
-            logger.info('user found: ', username);
-            return fnc(null, users[i]);
+    logger.info('looking for user: ', username);
+
+    User.findOne({ 'id': username }, function(err, user) {
+        if (err) return console.error(err);
+        if (!user) { 
+            logger.warn('findOne() user not found'); 
+            return fnc(null, null);
         }
-    }
+
+        logger.info('user found: ', user);
+        return fnc(null, user);
+    });
 
     //if empty dictionary should return null
-    logger.warn('findOne() user not found');
+    
 }
 
 function copyUser (obj) {
