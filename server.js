@@ -29,8 +29,9 @@ var userSchema = new Schema( {
     id: String,
     name: String,
     password: String,
-    picture: String
-    
+    picture: String,
+    followers: [ObjectId],
+    following: [ObjectId]
 });
 
 var postSchema = new Schema( { 
@@ -91,13 +92,36 @@ app.get('/api/users', function(req, res) {
         } else {
             return res.send({ users: [] } );    
         }
-        
     } else {
+        logger.info('find all users');
         Users.find({}, function (err, users) {
             return res.send({ users: users } );    
         })
         
     }
+});
+
+/**
+* This GET REQUEST is for specific users.
+* Used for url username request. 
+* Also for dashboard individual user-posts.
+*/
+
+app.get('/api/users/:user_id', function (req, res) {
+logger.info('GET REQUEST for individual user: ', req.params.user_id);
+    User.findOne({ 'id': req.params.user_id }, function (err, user) {
+        if (err) { return res.status(404).end() };
+        return res.send({ 'user': copyUser(user) });
+    });
+});
+
+
+app.get('/api/users/:user_id/following', function (req, res) {
+    logger.info('GET Users Following: ',req.query.following );
+    User.find({}, function (err, users) {
+        if (err) return res.status(404).end();
+        return res.send({ users: users });
+    })
 });
 
 
@@ -162,7 +186,15 @@ passport.deserializeUser(function(id, done) {
 
 app.get('/api/posts', function (req, res) {
     logger.info('GET on /api/posts');
-    Post.find({}, function (err, posts) {
+
+
+/** 
+* query - If there's an author get the posts from that author.
+* else get all the posts.
+*/
+    var query = req.query.author ? { 'author': req.query.author } : {} ;
+
+    Post.find(query, function (err, posts) {
         if (err) return res.status(403).end();
         var emberPosts = [];
         posts.forEach(function(post) {
@@ -174,7 +206,6 @@ app.get('/api/posts', function (req, res) {
             }
             emberPosts.push(emberPost);
         });
-        logger.info('getting all posts: ', posts);
         return res.send({ posts: emberPosts } );
     });
 });
@@ -255,21 +286,6 @@ app.delete('/api/posts/:post_id', ensureAuthenticated, function (req, res) {
 });
 
 
-/**
-* This GET REQUEST is for specific users.
-* Used for url username request. 
-* Also for dashboard individual user-posts.
-*/
-
-app.get('/api/users/:user_id', function (req, res) {
-logger.info('GET REQUEST for individual user: ', req.params.user_id);
-    User.findOne({ 'id': req.params.user_id }, function (err, user) {
-        if (err) { return res.status(404).end() };
-        return res.send({ 'user': copyUser(user) });
-    });
-});
-
-
 app.get('/api/logout', function (req, res) {
     req.logout();
     return res.status(200).end();
@@ -320,58 +336,3 @@ function ensureAuthenticated (req, res, next) {
 var server = app.listen(3000, function() {
     console.log('Serving on: ', server.address().port, '**************************************');
 });
-
-// var users = [
-//     { 
-//         id: 'cristianstrat', 
-//         name: 'Christian Strat',
-//         password: 'hello',
-//         picture: '/assets/images/cristian-strat.png'
-//     },
-//     { 
-//         id: 'johnmaeda', 
-//         name: 'John Maeda',
-//         password: 'hello',
-//         picture: '/assets/images/cristian-strat.png'
-//     },
-//     { 
-//         id: 'clarkewolfe', 
-//         name: 'Clarke Wolfe',
-//         password: 'hello',
-//         picture: '/assets/images/cristian-strat.png'
-//     },
-//     { 
-//         id: 'fastcompany', 
-//         name: 'Fast Company',
-//         password: 'hello',
-//         picture: '/assets/images/cristian-strat.png'
-//     }
-// ];
-
-// var posts = [
-//     { 
-//         id: 1,
-//         author: 'cristianstrat', 
-//         text: 'Great team constantly learn and re-learn how to move from the ego of *I* to the ego of *WE*.',
-//         timestamp: '2013-08-22T14:06:00+08:00'
-//     },
-//     {
-//         id: 2,
-//         author: 'clarkewolfe', 
-//         text: 'Listen, I don\'t want to brag about my awesome #gaming skills but someone made it into an @IGN article today...',
-//         timestamp: '2014-01-22T14:06:00+08:00'
-//     },
-//     { 
-//         id: 3,
-//         author: 'fastcompany', 
-//         text: 'THIS APP IS LIKE A REMOTE CONTROL FOR YOUR CREDIT CARDS',
-//         timestamp: '2014-08-22T14:17:37+08:00'
-//     },
-//     { 
-//         id: 4,
-//         author: 'fastcompany', 
-//         text: 'Leica is celebrating its 100th birthday by launching an entirely new camera system. Born out of a design partnership with Audi, the unibody Leica T is an APS-C-sensored minimalistic masterpiece.',
-//         timestamp: '2014-08-22T14:06:00+08:00'
-//     }
-// ];
-
