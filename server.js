@@ -30,8 +30,8 @@ var userSchema = new Schema( {
     name: String,
     password: String,
     picture: String,
-    followers: [ObjectId],
-    following: [ObjectId]
+    followers: [String],
+    following: [String]
 });
 
 var postSchema = new Schema( { 
@@ -92,6 +92,30 @@ app.get('/api/users', function(req, res) {
         } else {
             return res.send({ users: [] } );    
         }
+
+    } else if (req.query.operation === 'following') {
+        logger.info('Getting users following: ', req.query.curUser);
+        var emberArray = [];
+        
+        User.findOne({ id: req.query.curUser }, function (err, curUser) {
+            if (err) return res.status(403).end();
+            User.find({ id: { $in: curUser.following }}, function (err, following) {
+                if (err) return res.status(403).end();
+                return res.send({ user: following });
+            });
+        });
+
+    } else if (req.query.operation === 'followers') {
+        logger.info('Getting followers for: ', req.query.curUser);
+        
+        var emberArray = [];
+        User.findOne({ id: req.query.curUser }, function (err, curUser) {
+            if (err) return res.status(403).end();
+            User.find({ id: { $in: curUser.followers }}, function (err, followers) {
+                if (err) return res.status(403).end();
+                return res.send({ user: followers });
+            });
+        });
     } else {
         logger.info('find all users');
         Users.find({}, function (err, users) {
