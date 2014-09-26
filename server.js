@@ -1,5 +1,6 @@
 var express = require('express');
 var session = require('express-session');
+var async = require('async');
 
 /** 
 * Used by passport.js serializing data 
@@ -59,11 +60,13 @@ app.use(passport.session());
 * User LOGIN or get users. Used for following and follower stream
 */
 app.get('/api/users', function(req, res) {
-    logger.info('GET users');
+    logger.info('GET /users/');
+
     if (req.query.operation === 'login') {
-        logger.info('user logging in: ', req.query.username);
+        logger.info('req.query.operation = login - username: ', req.query.username);
         passport.authenticate('local', function(err, user, info) {
-           
+            logger.info("passport.authenticate() - user.id: ", user.id);
+
             if (err) { 
                 logger.error('Passport authenticate error in authenticating');
                 return res.status(500).end(); 
@@ -73,14 +76,14 @@ app.get('/api/users', function(req, res) {
                 return res.status(404).end(); 
             }
             
-            logger.info("this is user: ", user);
-
             req.logIn(user, function(err) {
                 if (err) { 
-                    logger.error('Something wrong with res.login()');
+                    logger.info('if err in req.login() user.id: ', user);
+                    logger.error('Something wrong with res.login()', err);
                     return res.status(500).end(); 
                 }
-                return res.send({ users: [copyUser(user)] } );
+                //also add currently logged in user to see isFollowing or not. 
+                return res.send({ users: [user] } );
             });
         })(req, res);
 
@@ -94,14 +97,20 @@ app.get('/api/users', function(req, res) {
         }
 
     } else if (req.query.operation === 'following') {
-        logger.info('Getting users following: ', req.query.curUser);
+        logger.info('GET /users/ req.query.operation = following - req.query.curUser: ', req.query.curUser);
+        
         var emberArray = [];
         
         User.findOne({ id: req.query.curUser }, function (err, curUser) {
             if (err) return res.status(403).end();
             User.find({ id: { $in: curUser.following }}, function (err, following) {
+                logger.info('Fn find() curUser.following - following: ', curUser.following);
                 if (err) return res.status(403).end();
-                return res.send({ user: following });
+                for (var i = 0; i < following.length; i++) {
+                    var u = copyUser(following[i], req.user);
+                    emberArray.push(u);
+                }
+                return res.send({ user: emberArray });
             });
         });
 
@@ -113,7 +122,11 @@ app.get('/api/users', function(req, res) {
             if (err) return res.status(403).end();
             User.find({ id: { $in: curUser.followers }}, function (err, followers) {
                 if (err) return res.status(403).end();
-                return res.send({ user: followers });
+                for (var i = 0; i < followers.length; i++) {
+                    var u = copyUser(followers[i], req.user);
+                    emberArray.push(u);
+                }
+                return res.send({ user: emberArray });
             });
         });
     } else {
@@ -135,7 +148,7 @@ app.get('/api/users/:user_id', function (req, res) {
 logger.info('GET REQUEST for individual user: ', req.params.user_id);
     User.findOne({ 'id': req.params.user_id }, function (err, user) {
         if (err) { return res.status(404).end() };
-        return res.send({ 'user': copyUser(user) });
+        return res.send({ 'user': copyUser(user, req.user) });
     });
 });
 
@@ -156,7 +169,7 @@ app.get('/api/users/:user_id/following', function (req, res) {
 
 passport.use(new LocalStrategy(
     function (username, password, done) {
-        logger.info('Using local strategy');
+        logger.info('fnc LocalStrategy - username: ', username);
         findOne( username, function (err, user) {
             if (err) { 
                 logger.info('findOne returned error in local passport');
@@ -170,7 +183,7 @@ passport.use(new LocalStrategy(
                 logger.warn('Password is incorrect.');
                 return done(null, false, { message: 'Incorrect password.' } );
             }
-            logger.info('local returning user: ', user);
+            logger.info('local returning user: ', user.id);
             return done(null, user);
         });
     })
@@ -191,7 +204,7 @@ passport.use(new LocalStrategy(
 */
 
 passport.serializeUser(function(user, done) {
-    logger.info('serialized!!');
+    logger.info('serialUser() - user: ', user);
     //passes in unique key
   done(null, user.id);
 });
@@ -298,13 +311,87 @@ app.post('/api/users', function (req, res) {
     }
 });
 
+app.post('/api/follow', ensureAuthenticated, function (req, res) {
+    logger.info('POST on api/follow: ',req.user, ' ', req.body);
+    //logged in user array adds to following
+    //current adds user to follwers
+    async.parallel({ 
+        
+        setFollowing: function(cb) {
+            logger.info('setFollowing()');
+            User.findOneAndUpdate( 
+                { id: req.user.id },
+                { $push: { following: req.body.id }},
+                { safe: true, upsert: true },
+                function (err, user) {
+                    console.log(err);
+                    return cb(null, {user: user});
+                }
+            );
+        },
+        setFollowers: function(cb) {
+            logger.info('setFollowers()');
+            User.findOneAndUpdate( 
+                { id: req.body.id },
+                { $push: { followers: req.user.id }},
+                { safe: true, upsert: true },
+                function (err, user) {
+                    console.log(err);
+                    return cb(null, {user: user});
+                }
+            );
+        }
+    }, 
+    function (err, results) {
+            return res.send(results);
+    });
+});
+
+app.post('/api/unfollow', ensureAuthenticated, function (req, res) {
+    logger.info('POST on api/unfollow: ',req.user, ' ', req.body);
+
+    async.parallel({ 
+        setFollowing: function(cb) {
+            User.findOneAndUpdate( 
+                { id: req.user.id },
+                { $pull: { following: req.body.id }},
+                { safe: true, upsert: true },
+                function (err, user) {
+                    console.log(err);
+                    return cb(null, {user: user});
+                }
+            );
+            
+        },
+        setFollowers: function(cb) {
+            User.findOneAndUpdate( 
+                { id: req.body.id },
+                { $pull: { followers: req.user.id }},
+                { safe: true, upsert: true },
+                function (err, user) {
+                    if (err) {
+                        logger.error(err);
+                    }
+                    console.log(err);
+                    return cb(null, {user: user});
+                }
+            );
+            logger.info('setFollowers()');
+            
+        }
+    }, 
+    function (err, results) {
+            return res.send(results);
+    });
+});
+
 
 /**
 * Delete Post.
 */
 app.delete('/api/posts/:post_id', ensureAuthenticated, function (req, res) {
     Post.remove({ author: req.params.post_id }, function (err) {
-        if (err) return res.status(404).end();
+        if (err) {return res.status(404).end();}
         return res.send({});
     });
 });
@@ -317,16 +404,16 @@ app.get('/api/logout', function (req, res) {
 
 
 function findOne (username, fnc) {
-    logger.info('findOne function. Looking for: ', username);
+    logger.info('Fn findOne(username, fnc) - username: ', username);
 
     User.findOne({ 'id': username }, function(err, user) {
-        if (err) return console.error(err);
+        if (err) {return console.error(err);}
         if (!user) { 
             logger.warn('findOne() user not found'); 
             return fnc(null, null);
         }
 
-        logger.info('user found: ', user);
+        logger.info('user found: ', user.id);
         return fnc(null, user);
     });
 }
@@ -336,12 +423,15 @@ function findOne (username, fnc) {
 * Used to delete password and return user object.
 */
 
-function copyUser (obj) {
+function copyUser (user, loggedInUser) {
+
     var copy = {
-        id: obj.id,
-        name: obj.name,
-        picture: '/assets/images/cristian-strat.png'
+        id: user.id,
+        name: user.name,
+        picture: '/assets/images/cristian-strat.png',
+        isFollowed: (loggedInUser.following.indexOf(user.id) !== -1 ) ? true : false
     };
+    logger.info('FN copyUser() - copy.isFollowing: ', copy.id, ' ', copy.isFollowed);
     return copy;
 }
 
