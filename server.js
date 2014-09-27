@@ -302,7 +302,7 @@ app.post('/api/users', function (req, res) {
             logger.info('req.login');
 
             if (err) { return res.status(500).end(); }
-            return res.send({ user: copyUser(req.body.user) } );
+            return res.send({ user: copyUser(req.body.user, null) } );
         });
 
     } else {
