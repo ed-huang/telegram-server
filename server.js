@@ -21,7 +21,7 @@ var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
 
 var mongoose = require('mongoose');
-var ObjectId = mongoose.Schema.Types.ObjectId;
+// var ObjectId = mongoose.Schema.Types.ObjectId;
     mongoose.connect('mongodb://localhost/test');
 
 var Schema = mongoose.Schema;
@@ -64,6 +64,7 @@ app.get('/api/users', function(req, res) {
 
     if (req.query.operation === 'login') {
         logger.info('req.query.operation = login - username: ', req.query.username);
+
         passport.authenticate('local', function(err, user, info) {
             logger.info("passport.authenticate() - user.id: ", user.id);
 
@@ -106,11 +107,12 @@ app.get('/api/users', function(req, res) {
             User.find({ id: { $in: curUser.following }}, function (err, following) {
                 logger.info('Fn find() curUser.following - following: ', curUser.following);
                 if (err) return res.status(403).end();
+                //*** maybe use forEach ?
                 for (var i = 0; i < following.length; i++) {
                     var u = copyUser(following[i], req.user);
                     emberArray.push(u);
                 }
-                return res.send({ user: emberArray });
+                return res.send({ users: emberArray });
             });
         });
 
@@ -126,7 +128,7 @@ app.get('/api/users', function(req, res) {
                     var u = copyUser(followers[i], req.user);
                     emberArray.push(u);
                 }
-                return res.send({ user: emberArray });
+                return res.send({ users: emberArray });
             });
         });
     } else {
@@ -153,13 +155,13 @@ logger.info('GET REQUEST for individual user: ', req.params.user_id);
 });
 
 
-app.get('/api/users/:user_id/following', function (req, res) {
-    logger.info('GET Users Following: ',req.query.following );
-    User.find({}, function (err, users) {
-        if (err) return res.status(404).end();
-        return res.send({ users: users });
-    })
-});
+// app.get('/api/users/:user_id/following', function (req, res) {
+//     logger.info('GET Users Following: ',req.query.following );
+//     User.find({}, function (err, users) {
+//         if (err) return res.status(404).end();
+//         return res.send({ users: users });
+//     })
+// });
 
 
 /**
@@ -203,6 +205,7 @@ passport.use(new LocalStrategy(
 * The following uses user.id (this is used to keep data in the session small).
 */
 
+
 passport.serializeUser(function(user, done) {
     logger.info('serialUser() - user: ', user);
     //passes in unique key
@@ -222,6 +225,7 @@ passport.deserializeUser(function(id, done) {
 */
 
 app.get('/api/posts', function (req, res) {
+    
     logger.info('GET on /api/posts');
 
 
@@ -229,7 +233,14 @@ app.get('/api/posts', function (req, res) {
 * query - If there's an author get the posts from that author.
 * else get all the posts.
 */
-    var query = req.query.author ? { 'author': req.query.author } : {} ;
+
+    var query;
+    
+    if (req.query.operation === 'dashboard') {
+        query = { author : { $in: req.user.following }};    
+    } else {
+        query = req.query.author ? { 'author': req.query.author } : {} ;
+    }
 
     Post.find(query, function (err, posts) {
         if (err) return res.status(403).end();
@@ -242,6 +253,7 @@ app.get('/api/posts', function (req, res) {
                 timestamp: post.timestamp
             }
             emberPosts.push(emberPost);
+
         });
         return res.send({ posts: emberPosts } );
     });
@@ -296,14 +308,14 @@ app.post('/api/users', function (req, res) {
         User.create(req.body.user, function (err, user) {
             if (err) return res.status(403).end();
             logger.info('User Created: ', user.id);
-        });    
 
-        req.login(req.body.user, function(err) {
+            req.login(req.body.user, function(err) {
             logger.info('req.login');
 
             if (err) { return res.status(500).end(); }
-            return res.send({ user: copyUser(req.body.user, null) } );
-        });
+                return res.send({ user: copyUser(req.body.user, null) } );
+            });
+        });    
 
     } else {
         logger.debug('signUp error: ', req.body.user);
@@ -321,7 +333,8 @@ app.post('/api/follow', ensureAuthenticated, function (req, res) {
             logger.info('setFollowing()');
             User.findOneAndUpdate( 
                 { id: req.user.id },
-                { $push: { following: req.body.id }},
+                { $addToSet: { following: req.body.id }},
+                //***** use addToset instead of push so you get unique posts in mongodb. 
                 { safe: true, upsert: true },
                 function (err, user) {
                     console.log(err);
@@ -333,7 +346,7 @@ app.post('/api/follow', ensureAuthenticated, function (req, res) {
             logger.info('setFollowers()');
             User.findOneAndUpdate( 
                 { id: req.body.id },
-                { $push: { followers: req.user.id }},
+                { $addToSet: { followers: req.user.id }},
                 { safe: true, upsert: true },
                 function (err, user) {
                     console.log(err);
@@ -425,12 +438,18 @@ function findOne (username, fnc) {
 
 function copyUser (user, loggedInUser) {
 
+logger.info('fn copyUser user: ', user, ' loggedInUser: ', loggedInUser);
     var copy = {
         id: user.id,
         name: user.name,
-        picture: '/assets/images/cristian-strat.png',
-        isFollowed: (loggedInUser.following.indexOf(user.id) !== -1 ) ? true : false
+        picture: '/assets/images/cristian-strat.png'
     };
+
+    if (loggedInUser) {
+        copy.isFollowed = loggedInUser.following.indexOf(user.id) !== -1  ? true : false;
+    } else {
+        copy.isFollowed = false;
+    }
     logger.info('FN copyUser() - copy.isFollowing: ', copy.id, ' ', copy.isFollowed);
     return copy;
 }
