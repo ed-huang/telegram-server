@@ -17,34 +17,38 @@ var app = express();
 
 var logger = require('nlogger').logger(module);
 
+// var passport = require('/passport-authenticate')
+//passport-aunthenticate.js
 var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
 
 var mongoose = require('mongoose');
-// var ObjectId = mongoose.Schema.Types.ObjectId;
-    mongoose.connect('mongodb://localhost/test');
 
-var Schema = mongoose.Schema;
+// var db_name = require('./config').DATABASE_NAME;
+// var db_host_name = require('./config').HOST_NAME;
 
-var userSchema = new Schema( {
-    id: String,
-    name: String,
-    password: String,
-    picture: String,
-    followers: [String],
-    following: [String]
-});
+//export database.js
 
-var postSchema = new Schema( { 
-    author: String,
-    text: String,
-    timestamp: Date
-});
+// mongoose.connect('mongodb://'+ db_host_name +'/'+ db_name);
 
-var User = mongoose.model('User', userSchema);
-var Post = mongoose.model('Post', postSchema);
+//this goes in database.js
+// var userSchema = require('./user');
+// var postSchema = require('./post');
 
+
+//database.js
+var User = require('./database').User;
+var Post = require('./database').Post;
+
+//module.exports = mongooseconnection
 var db = mongoose.connection;
+
+//var connection = require('/database');
+//var User = connect.model('User');
+//User.find etc...
+
+
+
 db.on('error', console.error.bind(console, 'connection error:'));
 
 app.use(cookieParser());
@@ -55,6 +59,7 @@ app.use(session({ secret: 'keyboard cat', resave: true, saveUninitialized: true,
 app.use(passport.initialize());
 app.use(passport.session());
 
+//require('/router')(app);
 
 /**
 * User LOGIN or get users. Used for following and follower stream
@@ -92,6 +97,7 @@ app.get('/api/users', function(req, res) {
         logger.info('isAuthenticated: ', req.isAuthenticated());
         
         if (req.isAuthenticated()) {
+            //use copyUser only data required
             return res.send({ users:[req.user] });
         } else {
             return res.send({ users: [] } );    
@@ -108,10 +114,12 @@ app.get('/api/users', function(req, res) {
                 logger.info('Fn find() curUser.following - following: ', curUser.following);
                 if (err) return res.status(403).end();
                 //*** maybe use forEach ?
-                for (var i = 0; i < following.length; i++) {
-                    var u = copyUser(following[i], req.user);
+                following.forEach(function (follower) {
+                    var u = removePassword(follower);
+                    u = setIsFollowed(u, req.user);
                     emberArray.push(u);
-                }
+                });
+                
                 return res.send({ users: emberArray });
             });
         });
@@ -120,14 +128,19 @@ app.get('/api/users', function(req, res) {
         logger.info('Getting followers for: ', req.query.curUser);
         
         var emberArray = [];
+        
         User.findOne({ id: req.query.curUser }, function (err, curUser) {
             if (err) return res.status(403).end();
+            
             User.find({ id: { $in: curUser.followers }}, function (err, followers) {
                 if (err) return res.status(403).end();
-                for (var i = 0; i < followers.length; i++) {
-                    var u = copyUser(followers[i], req.user);
+
+                followers.forEach(function (follower) {
+                    var u = removePassword(follower);
+                    u = setIsFollowed(u, req.user);
                     emberArray.push(u);
-                }
+                });
+
                 return res.send({ users: emberArray });
             });
         });
@@ -147,10 +160,14 @@ app.get('/api/users', function(req, res) {
 */
 
 app.get('/api/users/:user_id', function (req, res) {
-logger.info('GET REQUEST for individual user: ', req.params.user_id);
+    logger.info('GET REQUEST for individual user: ', req.params.user_id);
+
     User.findOne({ 'id': req.params.user_id }, function (err, user) {
-        if (err) { return res.status(404).end() };
-        return res.send({ 'user': copyUser(user, req.user) });
+        //if user is not found will return null. 
+
+        if (err) { return res.status(500).end() };
+        if(!user) { return res.status(404).end() };
+        return res.send({ 'user': removePassword(user) });
     });
 });
 
@@ -169,10 +186,16 @@ logger.info('GET REQUEST for individual user: ', req.params.user_id);
 * Passport can use different types of strategies. 
 */
 
+//require(/database) 
+//passport-aunthenticate
 passport.use(new LocalStrategy(
     function (username, password, done) {
         logger.info('fnc LocalStrategy - username: ', username);
-        findOne( username, function (err, user) {
+        //User.find({user: username}, function(err.user))
+        //findUser is superfluous
+        //git branch 
+        // findUserById( username, function (err, user) {
+        User.findOne({id: username}, function (err, user) {
             if (err) { 
                 logger.info('findOne returned error in local passport');
                 return done(err); 
@@ -205,17 +228,18 @@ passport.use(new LocalStrategy(
 * The following uses user.id (this is used to keep data in the session small).
 */
 
+//var authenticate = require('/authentication');
 
 passport.serializeUser(function(user, done) {
     logger.info('serialUser() - user: ', user);
     //passes in unique key
-  done(null, user.id);
+    done(null, user.id);
 });
 
 passport.deserializeUser(function(id, done) {
-  findOne(id, function(err, user) {
-    done(err, user);
-  });
+    User.findOne({id: id}, function (err, user) {
+        done(err, user);
+    });
 });
 
 
@@ -233,11 +257,13 @@ app.get('/api/posts', function (req, res) {
 * query - If there's an author get the posts from that author.
 * else get all the posts.
 */
+    //Always init variable
 
-    var query;
+    var query = {};
     
     if (req.query.operation === 'dashboard') {
-        query = { author : { $in: req.user.following }};    
+        query = { $or: [{ author : { $in: req.user.following }}, {author: req.user.id}]};
+        logger.info('this is query: ', query);
     } else {
         query = req.query.author ? { 'author': req.query.author } : {} ;
     }
@@ -245,7 +271,7 @@ app.get('/api/posts', function (req, res) {
     Post.find(query, function (err, posts) {
         if (err) return res.status(403).end();
         var emberPosts = [];
-        posts.forEach(function(post) {
+        posts.forEach(function (post) {
             var emberPost = {
                 id: post._id,
                 author: post.author, 
@@ -301,19 +327,19 @@ app.post('/api/posts', ensureAuthenticated, function (req, res) {
 * POST is always used for creating a new record.
 */
 app.post('/api/users', function (req, res) {
-    logger.info('CREATE USER - POST to api/users');
+    logger.info('CREATE USER - POST to api/users: ', req.body.user);
 
     if (req.body.user) {
-
+        req.body.user.isFollowed = true;
         User.create(req.body.user, function (err, user) {
             if (err) return res.status(403).end();
+
             logger.info('User Created: ', user.id);
-
             req.login(req.body.user, function(err) {
-            logger.info('req.login');
-
-            if (err) { return res.status(500).end(); }
-                return res.send({ user: copyUser(req.body.user, null) } );
+                logger.info('req.login');
+                if (err) { return res.status(500).end(); }
+                var u = removePassword(user);
+                return res.send({user: u});
             });
         });    
 
@@ -323,6 +349,7 @@ app.post('/api/users', function (req, res) {
     }
 });
 
+//api/user/follow
 app.post('/api/follow', ensureAuthenticated, function (req, res) {
     logger.info('POST on api/follow: ',req.user, ' ', req.body);
     //logged in user array adds to following
@@ -356,7 +383,8 @@ app.post('/api/follow', ensureAuthenticated, function (req, res) {
         }
     }, 
     function (err, results) {
-            return res.send(results);
+        if(err) {return res.status(500).end();}
+        return res.status(200).end();
     });
 });
 
@@ -394,7 +422,8 @@ app.post('/api/unfollow', ensureAuthenticated, function (req, res) {
         }
     }, 
     function (err, results) {
-            return res.send(results);
+        if(err) {return res.status(500).end();}
+        return res.status(200).end();
     });
 });
 
@@ -410,51 +439,50 @@ app.delete('/api/posts/:post_id', ensureAuthenticated, function (req, res) {
 });
 
 
+//user-route api/users/logout
 app.get('/api/logout', function (req, res) {
     req.logout();
     return res.status(200).end();
 });
 
 
-function findOne (username, fnc) {
-    logger.info('Fn findOne(username, fnc) - username: ', username);
+//user-routes.js
+function removePassword (user) {
 
-    User.findOne({ 'id': username }, function(err, user) {
-        if (err) {return console.error(err);}
-        if (!user) { 
-            logger.warn('findOne() user not found'); 
-            return fnc(null, null);
-        }
-
-        logger.info('user found: ', user.id);
-        return fnc(null, user);
-    });
-}
-
-
-/**
-* Used to delete password and return user object.
-*/
-
-function copyUser (user, loggedInUser) {
-
-logger.info('fn copyUser user: ', user, ' loggedInUser: ', loggedInUser);
+logger.info('fn removePassword user: ', user);
     var copy = {
         id: user.id,
         name: user.name,
         picture: '/assets/images/cristian-strat.png'
     };
 
-    if (loggedInUser) {
-        copy.isFollowed = loggedInUser.following.indexOf(user.id) !== -1  ? true : false;
-    } else {
-        copy.isFollowed = false;
-    }
-    logger.info('FN copyUser() - copy.isFollowing: ', copy.id, ' ', copy.isFollowed);
+    // if (loggedInUser) {
+    //     if ((loggedInUser.following.indexOf(user.id) !== -1) || user.id === loggedInUser.id) {
+    //         copy.isFollowed = true;
+    //     } else {
+    //         copy.isFollowed = false;
+    //     }
+    // } else {
+    //     copy.isFollowed = false;
+    // }
+    // logger.info('FN removePassword() - copy.isFollowing: ', copy.id, ' ', copy.isFollowed);
     return copy;
 }
 
+function setIsFollowed (user, loggedInUser) {
 
+    if (loggedInUser) {
+        var userIsFollowing = loggedInUser.following.indexOf(user.id) !== -1 ? true : false;
+        if (userIsFollowing) {
+            user.isFollowed = true;
+        } else {
+            user.isFollowed = false;
+        }
+    }
+    return user;
+}
+
+// ensureAuthenticate module.exports
 //is also a middleware
 function ensureAuthenticated (req, res, next) {
     logger.debug('ensureAuthticated: ', req.isAuthenticated());
