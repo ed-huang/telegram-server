@@ -49,12 +49,13 @@ var LocalStrategy = require('passport-local').Strategy;
 //     timestamp: Date
 // });
 
-
+var db = require('./database');
+// db.model('User').find();//etc...
 //database.js
 //var userSchema = require('./user');
 //var User = mongoose.model('User', userSchema);
-var User = require('./connection').User;
-var Post = require('./connection').Post;
+var User = db.model('User');
+var Post = db.model('Post');
 // var Post = mongoose.model('Post', postSchema);
 
 
@@ -284,7 +285,7 @@ app.get('/api/posts', function (req, res) {
         query = { $or: [{ author : { $in: req.user.following }}, { author: req.user.id }]};
         logger.info('this is query: ', query);
     } else {
-        query = req.query.author ? { 'author': req.query.author } : {} ;
+        query = req.query.author ? { author: req.query.author } : {} ;
     }
 
     Post.find(query, function (err, posts) {
@@ -447,9 +448,6 @@ app.post('/api/unfollow', ensureAuthenticated, function (req, res) {
 });
 
 
-/**
-* Delete Post.
-*/
 app.delete('/api/posts/:post_id', ensureAuthenticated, function (req, res) {
     logger.info('DELETE POST: ', req.params.post_id);
     Post.remove({ _id: req.params.post_id }, function (err) {
@@ -468,24 +466,12 @@ app.get('/api/logout', function (req, res) {
 
 //user-routes.js
 function removePassword (user) {
-
 logger.info('fn removePassword user: ', user);
     var copy = {
         id: user.id,
         name: user.name,
         picture: '/assets/images/cristian-strat.png'
     };
-
-    // if (loggedInUser) {
-    //     if ((loggedInUser.following.indexOf(user.id) !== -1) || user.id === loggedInUser.id) {
-    //         copy.isFollowed = true;
-    //     } else {
-    //         copy.isFollowed = false;
-    //     }
-    // } else {
-    //     copy.isFollowed = false;
-    // }
-    // logger.info('FN removePassword() - copy.isFollowing: ', copy.id, ' ', copy.isFollowed);
     return copy;
 }
 
