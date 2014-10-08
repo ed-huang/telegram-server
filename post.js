@@ -1,13 +1,9 @@
 //post.js
-var mongoose = require('mongoose');
 
-
-var Schema = mongoose.Schema;
-
-var postSchema = new Schema( { 
+var postSchema = { 
     author: String,
     text: String,
     timestamp: Date
-});
+};
 
 module.exports = postSchema;

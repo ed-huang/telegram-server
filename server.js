@@ -22,40 +22,44 @@ var logger = require('nlogger').logger(module);
 var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
 
-var mongoose = require('mongoose');
+// var mongoose = require('./connection').mongoose;
 
-var db_name = require('./config').DATABASE_NAME;
-var db_host_name = require('./config').HOST_NAME;
+// var db_name = require('./config').DATABASE_NAME;
+// var db_host_name = require('./config').HOST_NAME;
 
 //export database.js
 
-mongoose.connect('mongodb://localhost/test');
+//mongoose.connect('mongodb://'+db_host_name+'/'+db_name);
 
-var Schema = mongoose.Schema;
+// var Schema = mongoose.Schema;
 
 //this goes in database.js
-var userSchema = new Schema( {
-    id: String,
-    name: String,
-    password: String,
-    picture: String,
-    followers: [String],
-    following: [String]
-});
+// var userSchema = new Schema( {
+//     id: String,
+//     name: String,
+//     password: String,
+//     picture: String,
+//     followers: [String],
+//     following: [String]
+// });
 
-var postSchema = new Schema( { 
-    author: String,
-    text: String,
-    timestamp: Date
-});
+// var postSchema = new Schema( { 
+//     author: String,
+//     text: String,
+//     timestamp: Date
+// });
 
 
 //database.js
-var User = mongoose.model('User', userSchema);
-var Post = mongoose.model('Post', postSchema);
+//var userSchema = require('./user');
+//var User = mongoose.model('User', userSchema);
+var User = require('./connection').User;
+var Post = require('./connection').Post;
+// var Post = mongoose.model('Post', postSchema);
+
 
 //module.exports = mongooseconnection
-var db = mongoose.connection;
+//var db = mongoose.connection;
 
 //var connection = require('/database');
 //var User = connect.model('User');
@@ -63,7 +67,7 @@ var db = mongoose.connection;
 
 
 
-db.on('error', console.error.bind(console, 'connection error:'));
+//db.on('error', console.error.bind(console, 'connection error:'));
 
 app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: false })); // parse application/json // used for POST and parsed request.body
