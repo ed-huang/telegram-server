@@ -1,74 +1,17 @@
 var express = require('express');
 var session = require('express-session');
 var async = require('async');
-
-/** 
-* Used by passport.js serializing data 
-*/
 var cookieParser = require('cookie-parser');
-
-/**
-* bodyParser - For parsing payloaods from post requests. 
-* Also used by passport.js
-*/
 var bodyParser = require('body-parser');
-
 var app = express();
-
 var logger = require('nlogger').logger(module);
-
-// var passport = require('/passport-authenticate')
-//passport-aunthenticate.js
 var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
 
-// var mongoose = require('./connection').mongoose;
-
-// var db_name = require('./config').DATABASE_NAME;
-// var db_host_name = require('./config').HOST_NAME;
-
-//export database.js
-
-//mongoose.connect('mongodb://'+db_host_name+'/'+db_name);
-
-// var Schema = mongoose.Schema;
-
-//this goes in database.js
-// var userSchema = new Schema( {
-//     id: String,
-//     name: String,
-//     password: String,
-//     picture: String,
-//     followers: [String],
-//     following: [String]
-// });
-
-// var postSchema = new Schema( { 
-//     author: String,
-//     text: String,
-//     timestamp: Date
-// });
-
 var db = require('./database');
-// db.model('User').find();//etc...
-//database.js
-//var userSchema = require('./user');
-//var User = mongoose.model('User', userSchema);
+
 var User = db.model('User');
 var Post = db.model('Post');
-// var Post = mongoose.model('Post', postSchema);
-
-
-//module.exports = mongooseconnection
-//var db = mongoose.connection;
-
-//var connection = require('/database');
-//var User = connect.model('User');
-//User.find etc...
-
-
-
-//db.on('error', console.error.bind(console, 'connection error:'));
 
 app.use(cookieParser());
 app.use(bodyParser.urlencoded({ extended: false })); // parse application/json // used for POST and parsed request.body
@@ -77,8 +20,6 @@ app.use(bodyParser.json({ type: 'application/vnd.api+json' }));
 app.use(session({ secret: 'keyboard cat', resave: true, saveUninitialized: true, rolling: true }));
 app.use(passport.initialize());
 app.use(passport.session());
-
-//require('/router')(app);
 
 /**
 * User LOGIN or get users. Used for following and follower stream
@@ -107,18 +48,18 @@ app.get('/api/users', function(req, res) {
                     logger.error('Something wrong with res.login()', err);
                     return res.status(500).end(); 
                 }
-                //also add currently logged in user to see isFollowing or not. 
 
                 return res.send({ users: [removePassword(user)] } );
             });
         })(req, res);
 
+    //Used when viewing other users profile. 
+    //If he is logged in then it will fire true and return the current user;
     } else if (req.query.operation === 'authenticating') {
         logger.info('isAuthenticated: ', req.isAuthenticated());
         
         if (req.isAuthenticated()) {
-            //use copyUser only data required
-            return res.send({ users:[req.user] });
+            return res.send({ users:[removePassword(req.user)] });
         } else {
             return res.send({ users: [] } );    
         }
@@ -491,7 +432,7 @@ function setIsFollowed (user, loggedInUser) {
 // ensureAuthenticate module.exports
 //is also a middleware
 function ensureAuthenticated (req, res, next) {
-    logger.debug('ensureAuthticated: ', req.isAuthenticated());
+    logger.info('ensureAuthticated: ', req.isAuthenticated());
     if (req.isAuthenticated()) {
         logger.info('isAuthenticated');
         return next();
