@@ -24,21 +24,35 @@ var LocalStrategy = require('passport-local').Strategy;
 
 var mongoose = require('mongoose');
 
-// var db_name = require('./config').DATABASE_NAME;
-// var db_host_name = require('./config').HOST_NAME;
+var db_name = require('./config').DATABASE_NAME;
+var db_host_name = require('./config').HOST_NAME;
 
 //export database.js
 
-// mongoose.connect('mongodb://'+ db_host_name +'/'+ db_name);
+mongoose.connect('mongodb://localhost/test');
+
+var Schema = mongoose.Schema;
 
 //this goes in database.js
-// var userSchema = require('./user');
-// var postSchema = require('./post');
+var userSchema = new Schema( {
+    id: String,
+    name: String,
+    password: String,
+    picture: String,
+    followers: [String],
+    following: [String]
+});
+
+var postSchema = new Schema( { 
+    author: String,
+    text: String,
+    timestamp: Date
+});
 
 
 //database.js
-var User = require('./database').User;
-var Post = require('./database').Post;
+var User = mongoose.model('User', userSchema);
+var Post = mongoose.model('Post', postSchema);
 
 //module.exports = mongooseconnection
 var db = mongoose.connection;
@@ -89,7 +103,8 @@ app.get('/api/users', function(req, res) {
                     return res.status(500).end(); 
                 }
                 //also add currently logged in user to see isFollowing or not. 
-                return res.send({ users: [user] } );
+
+                return res.send({ users: [removePassword(user)] } );
             });
         })(req, res);
 
@@ -146,7 +161,7 @@ app.get('/api/users', function(req, res) {
         });
     } else {
         logger.info('find all users');
-        Users.find({}, function (err, users) {
+        User.find({}, function (err, users) {
             return res.send({ users: users } );    
         })
         
@@ -262,7 +277,7 @@ app.get('/api/posts', function (req, res) {
     var query = {};
     
     if (req.query.operation === 'dashboard') {
-        query = { $or: [{ author : { $in: req.user.following }}, {author: req.user.id}]};
+        query = { $or: [{ author : { $in: req.user.following }}, { author: req.user.id }]};
         logger.info('this is query: ', query);
     } else {
         query = req.query.author ? { 'author': req.query.author } : {} ;
@@ -432,7 +447,8 @@ app.post('/api/unfollow', ensureAuthenticated, function (req, res) {
 * Delete Post.
 */
 app.delete('/api/posts/:post_id', ensureAuthenticated, function (req, res) {
-    Post.remove({ author: req.params.post_id }, function (err) {
+    logger.info('DELETE POST: ', req.params.post_id);
+    Post.remove({ _id: req.params.post_id }, function (err) {
         if (err) {return res.status(404).end();}
         return res.send({});
     });
