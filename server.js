@@ -205,7 +205,7 @@ passport.deserializeUser(function(id, done) {
 
 
 /**
-* Requesting posts from the Posts Stream
+* Requesting posts from the Posts Stream 
 * dashboard GET()
 */
 
@@ -213,18 +213,14 @@ app.get('/api/posts', function (req, res) {
     
     logger.info('GET on /api/posts');
 
-
-/** 
-* query - If there's an author get the posts from that author.
-* else get all the posts.
-*/
-    //Always init variable
-
     var query = {};
     
     if (req.query.operation === 'dashboard') {
-        query = { $or: [{ author : { $in: req.user.following }}, { author: req.user.id }]};
-        logger.info('this is query: ', query);
+        if (req.user) {
+            query = { $or: [{ author : { $in: req.user.following }}, { author: req.user.id }]};
+            logger.info('this is query: ', query);    
+        }
+        
     } else {
         query = req.query.author ? { author: req.query.author } : {} ;
     }
@@ -292,18 +288,26 @@ app.post('/api/users', function (req, res) {
 
     if (req.body.user) {
         req.body.user.isFollowed = true;
-        User.create(req.body.user, function (err, user) {
-            if (err) return res.status(403).end();
 
-            logger.info('User Created: ', user.id);
-            req.login(req.body.user, function(err) {
-                logger.info('req.login');
-                if (err) { return res.status(500).end(); }
-                var u = removePassword(user);
-                return res.send({user: u});
-            });
-        });    
+        User.findOne({ id: req.body.user.id }, function (err, user) {
+            if (user) {
+                logger.debug('user already in db: ', req.body.user);
+                return res.status(403).end();
+            } else {
+                logger.info('compare: ', req.body.user.id, user);
 
+                User.create(req.body.user, function (err, user) {
+                    if (err) return res.status(403).end();
+                    logger.info('User Created: ', user.id);
+                    req.login(req.body.user, function(err) {
+                        logger.info('req.login');
+                        if (err) { return res.status(500).end(); }
+                        var u = removePassword(user);
+                        return res.send({user: u});
+                    });
+                });    
+            }
+        });
     } else {
         logger.debug('signUp error: ', req.body.user);
         res.status(403).end();
