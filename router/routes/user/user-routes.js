@@ -1,30 +1,19 @@
-var express = require('express');
-var session = require('express-session');
-var async = require('async');
-var cookieParser = require('cookie-parser');
-var bodyParser = require('body-parser');
-var app = express();
+
 var logger = require('nlogger').logger(module);
-var passport = require('passport');
-var LocalStrategy = require('passport-local').Strategy;
+logger.info('loading module user-routes');
 
-var db = require('./router/database');
+var express = require('express');
+var async = require('async');
+var passport = require('../../passport-aunthenticate');
 
+var router = express.Router();
+var db = require('../../database');
 var User = db.model('User');
-var Post = db.model('Post');
-
-app.use(cookieParser());
-app.use(bodyParser.urlencoded({ extended: false })); // parse application/json // used for POST and parsed request.body
-app.use(bodyParser.json()); // parse application/vnd.api+json as json
-app.use(bodyParser.json({ type: 'application/vnd.api+json' }));
-app.use(session({ secret: 'keyboard cat', resave: true, saveUninitialized: true, rolling: true }));
-app.use(passport.initialize());
-app.use(passport.session());
 
 /**
 * User LOGIN or get users. Used for following and follower stream
 */
-app.get('/api/users', function(req, res) {
+router.get('/', function(req, res) {
     logger.info('GET /users/');
 
     if (req.query.operation === 'login') {
@@ -120,7 +109,7 @@ app.get('/api/users', function(req, res) {
 * Also for dashboard individual user-posts.
 */
 
-app.get('/api/users/:user_id', function (req, res) {
+router.get('/:user_id', function (req, res) {
     logger.info('GET REQUEST for individual user: ', req.params.user_id);
 
     User.findOne({ 'id': req.params.user_id }, function (err, user) {
@@ -132,158 +121,11 @@ app.get('/api/users/:user_id', function (req, res) {
     });
 });
 
-
-// app.get('/api/users/:user_id/following', function (req, res) {
-//     logger.info('GET Users Following: ',req.query.following );
-//     User.find({}, function (err, users) {
-//         if (err) return res.status(404).end();
-//         return res.send({ users: users });
-//     })
-// });
-
-
-/**
-* This is the local stratgey used by Passport.
-* Passport can use different types of strategies. 
-*/
-
-//require(/database) 
-//passport-aunthenticate
-passport.use(new LocalStrategy(
-    function (username, password, done) {
-        logger.info('fnc LocalStrategy - username: ', username);
-        //User.find({user: username}, function(err.user))
-        //findUser is superfluous
-        //git branch 
-        // findUserById( username, function (err, user) {
-        User.findOne({id: username}, function (err, user) {
-            if (err) { 
-                logger.info('findOne returned error in local passport');
-                return done(err); 
-            }
-            if (!user) { 
-                logger.warn('User is incorrect.');
-                return done(null, false, { message: 'Incorrect username' } );
-            }
-            if (user.password !== password) {
-                logger.warn('Password is incorrect.');
-                return done(null, false, { message: 'Incorrect password.' } );
-            }
-            logger.info('local returning user: ', user.id);
-            return done(null, user);
-        });
-    })
-);
-
-/**
-* In a typical web application, 
-* the credentials used to authenticate a user 
-* will only be transmitted during the login request. req.login()
-* If authentication succeeds, 
-* a session will be established and maintained via a cookie set in the user's browser.
-*/
-
-/**
-* Serialize is called by req.login. 
-* It takes in user instances to be used for sessions. 
-* The following uses user.id (this is used to keep data in the session small).
-*/
-
-//var authenticate = require('/authentication');
-
-passport.serializeUser(function(user, done) {
-    logger.info('serialUser() - user: ', user);
-    //passes in unique key
-    done(null, user.id);
-});
-
-passport.deserializeUser(function(id, done) {
-    User.findOne({id: id}, function (err, user) {
-        done(err, user);
-    });
-});
-
-
-/**
-* Requesting posts from the Posts Stream 
-* dashboard GET()
-*/
-
-app.get('/api/posts', function (req, res) {
-    
-    logger.info('GET on /api/posts');
-
-    var query = {};
-    
-    if (req.query.operation === 'dashboard') {
-        if (req.user) {
-            query = { $or: [{ author : { $in: req.user.following }}, { author: req.user.id }]};
-            logger.info('this is query: ', query);    
-        }
-        
-    } else {
-        query = req.query.author ? { author: req.query.author } : {} ;
-    }
-
-    Post.find(query, function (err, posts) {
-        if (err) return res.status(403).end();
-        var emberPosts = [];
-        posts.forEach(function (post) {
-            var emberPost = {
-                id: post._id,
-                author: post.author, 
-                text: post.text,
-                timestamp: post.timestamp
-            }
-            emberPosts.push(emberPost);
-
-        });
-        return res.send({ posts: emberPosts } );
-    });
-});
-
-
-/**
-* Creating a post. Most Likely from the dashboard.
-*/
-app.post('/api/posts', ensureAuthenticated, function (req, res) {
-    logger.info('posts request');
-
-    var post = {
-        author: req.body.post.author,
-        text: req.body.post.text,
-        timestamp: req.body.post.timestamp
-    };
-
-    if (req.user.id === post.author) {
-        logger.info('id and author passed');
-
-        Post.create(post, function (err, post) {
-            if (err) return res.status(403).end();
-            
-            logger.info('Post Record Created: ', post.text);
-            
-            var emberPost = {
-                id: post._id,
-                author: req.user.id,
-                text: post.text,
-                timestamp: post.timestamp
-            };
-            
-            return res.send({ post: emberPost });
-        });
-    } else {
-        logger.warning('user tried unauthorized post');
-        return res.status(403).end();
-    }
-});
-
-
 /**
 * CREATE USER - new user record.
 * POST is always used for creating a new record.
 */
-app.post('/api/users', function (req, res) {
+router.post('/', function (req, res) {
     logger.info('CREATE USER - POST to api/users: ', req.body.user);
 
     if (req.body.user) {
@@ -315,7 +157,7 @@ app.post('/api/users', function (req, res) {
 });
 
 //api/user/follow
-app.post('/api/users/follow', ensureAuthenticated, function (req, res) {
+router.post('/follow', ensureAuthenticated, function (req, res) {
     logger.info('POST on api/follow: ',req.user, ' ', req.body);
     //logged in user array adds to following
     //current adds user to follwers
@@ -353,7 +195,7 @@ app.post('/api/users/follow', ensureAuthenticated, function (req, res) {
     });
 });
 
-app.post('/api/users/unfollow', ensureAuthenticated, function (req, res) {
+router.post('/unfollow', ensureAuthenticated, function (req, res) {
     logger.info('POST on api/unfollow: ',req.user, ' ', req.body);
 
     async.parallel({ 
@@ -392,33 +234,12 @@ app.post('/api/users/unfollow', ensureAuthenticated, function (req, res) {
     });
 });
 
-
-app.delete('/api/posts/:post_id', ensureAuthenticated, function (req, res) {
-    logger.info('DELETE POST: ', req.params.post_id);
-    Post.remove({ _id: req.params.post_id }, function (err) {
-        if (err) {return res.status(404).end();}
-        return res.send({});
-    });
-});
-
-
-//user-route api/users/logout
-app.get('/api/users/logout', function (req, res) {
+router.get('/logout', function (req, res) {
     req.logout();
     return res.status(200).end();
 });
 
 
-//user-routes.js
-function removePassword (user) {
-logger.info('fn removePassword user: ', user);
-    var copy = {
-        id: user.id,
-        name: user.name,
-        picture: '/assets/images/cristian-strat.png'
-    };
-    return copy;
-}
 
 function setIsFollowed (user, loggedInUser) {
 
@@ -433,8 +254,16 @@ function setIsFollowed (user, loggedInUser) {
     return user;
 }
 
-// ensureAuthenticate module.exports
-//is also a middleware
+function removePassword (user) {
+logger.info('fn removePassword user: ', user);
+    var copy = {
+        id: user.id,
+        name: user.name,
+        picture: '/assets/images/cristian-strat.png'
+    };
+    return copy;
+}
+
 function ensureAuthenticated (req, res, next) {
     logger.info('ensureAuthticated: ', req.isAuthenticated());
     if (req.isAuthenticated()) {
@@ -445,6 +274,5 @@ function ensureAuthenticated (req, res, next) {
     }
 }
 
-var server = app.listen(3000, function() {
-    console.log('Serving on: ', server.address().port, '**************************************');
-});
+
+module.exports = router;
