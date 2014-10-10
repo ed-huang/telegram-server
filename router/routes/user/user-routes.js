@@ -41,10 +41,11 @@ router.get('/', function(req, res) {
                 return res.send({ users: [removePassword(user)] } );
             });
         })(req, res);
-
+    }        
     //Used when viewing other users profile. 
     //If he is logged in then it will fire true and return the current user;
-    } else if (req.query.operation === 'authenticating') {
+    
+    else if (req.query.operation === 'authenticating') {
         logger.info('isAuthenticated: ', req.isAuthenticated());
         
         if (req.isAuthenticated()) {
@@ -52,8 +53,9 @@ router.get('/', function(req, res) {
         } else {
             return res.send({ users: [] } );    
         }
+    } 
 
-    } else if (req.query.operation === 'following') {
+    else if (req.query.operation === 'following') {
         logger.info('GET /users/ req.query.operation = following - req.query.curUser: ', req.query.curUser);
         
         var emberArray = [];
@@ -73,8 +75,9 @@ router.get('/', function(req, res) {
                 return res.send({ users: emberArray });
             });
         });
-
-    } else if (req.query.operation === 'followers') {
+    } 
+    
+    else if (req.query.operation === 'followers') {
         logger.info('Getting followers for: ', req.query.curUser);
         
         var emberArray = [];
@@ -94,7 +97,16 @@ router.get('/', function(req, res) {
                 return res.send({ users: emberArray });
             });
         });
-    } else {
+    } 
+
+    else if (req.query.operation === 'logout') {
+        logger.info('Logging Out');
+        req.logout();
+        // return res.status(200).end();
+        return res.send({ users: {} } );    
+    } 
+
+    else {
         logger.info('find all users');
         User.find({}, function (err, users) {
             return res.send({ users: users } );    
