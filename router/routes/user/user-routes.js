@@ -1,13 +1,11 @@
 
 var logger = require('nlogger').logger(module);
-logger.info('loading module user-routes');
-
 var express = require('express');
 var async = require('async');
-var passport = require('../../passport-aunthenticate');
+var passport = require('../../../passport/passport-aunthenticate');
 
 var router = express.Router();
-var db = require('../../database');
+var db = require('../../../database/database.js');
 var User = db.model('User');
 
 /**
@@ -111,7 +109,6 @@ router.get('/', function(req, res) {
         User.find({}, function (err, users) {
             return res.send({ users: users } );    
         })
-        
     }
 });
 
@@ -171,10 +168,8 @@ router.post('/', function (req, res) {
 //api/user/follow
 router.post('/follow', ensureAuthenticated, function (req, res) {
     logger.info('POST on api/follow: ',req.user, ' ', req.body);
-    //logged in user array adds to following
-    //current adds user to follwers
+    
     async.parallel({ 
-        
         setFollowing: function(cb) {
             logger.info('setFollowing()');
             User.findOneAndUpdate( 
@@ -250,8 +245,6 @@ router.get('/logout', function (req, res) {
     req.logout();
     return res.status(200).end();
 });
-
-
 
 function setIsFollowed (user, loggedInUser) {
 

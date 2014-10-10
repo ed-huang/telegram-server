@@ -1,7 +1,7 @@
 var logger = require('nlogger').logger(module);
 var express = require('express');
 var router = express.Router();
-var db = require('../../database');
+var db = require('../../../database/database');
 var Post = db.model('Post');
 
 /**
@@ -41,7 +41,6 @@ router.get('/', function (req, res) {
         return res.send({ posts: emberPosts } );
     });
 });
-
 
 /**
 * Creating a post. Most Likely from the dashboard.

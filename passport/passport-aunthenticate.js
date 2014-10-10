@@ -1,17 +1,13 @@
 var logger = require('nlogger').logger(module);
-var db = require('./database');
+var db = require('./../database/database');
 var User = db.model('User');
 var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
 
-
 passport.use(new LocalStrategy(
     function (username, password, done) {
         logger.info('fnc LocalStrategy - username: ', username);
-        //User.find({user: username}, function(err.user))
-        //findUser is superfluous
-        //git branch 
-        // findUserById( username, function (err, user) {
+        
         User.findOne({id: username}, function (err, user) {
             if (err) { 
                 logger.info('findOne returned error in local passport');
@@ -31,10 +27,8 @@ passport.use(new LocalStrategy(
     })
 );
 
-
 passport.serializeUser(function(user, done) {
     logger.info('serialUser() - user: ', user);
-    //passes in unique key
     done(null, user.id);
 });
 
