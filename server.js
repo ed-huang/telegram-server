@@ -8,7 +8,7 @@ var logger = require('nlogger').logger(module);
 var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
 
-var db = require('./router/database');
+var db = require('./database/database');
 
 var User = db.model('User');
 var Post = db.model('Post');

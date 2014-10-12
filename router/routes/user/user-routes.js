@@ -3,6 +3,7 @@ var logger = require('nlogger').logger(module);
 var express = require('express');
 var async = require('async');
 var passport = require('../../../passport/passport-aunthenticate');
+var bcrypt = require('bcrypt');
 
 var router = express.Router();
 var db = require('../../../database/database.js');
@@ -17,28 +18,33 @@ router.get('/', function(req, res) {
     if (req.query.operation === 'login') {
         logger.info('req.query.operation = login - username: ', req.query.username);
 
-        passport.authenticate('local', function(err, user, info) {
-            logger.info("passport.authenticate() - user.id: ", user.id);
+        User.findOne({id: req.query.username}, function (err, user) {
+            var userQuery = req.query;
+            logger.info('user password: ', user.password, 'query: ', userQuery.password);
 
-            if (err) { 
-                logger.error('Passport authenticate error in authenticating');
-                return res.status(500).end(); 
-            }
-            
-            if (!user) { 
-                return res.status(404).end(); 
-            }
-            
-            req.logIn(user, function(err) {
+            passport.authenticate('local', function(err, user, info) {
+                logger.info("passport.authenticate() - user.id: ", user.id);
+
                 if (err) { 
-                    logger.info('if err in req.login() user.id: ', user);
-                    logger.error('Something wrong with res.login()', err);
+                    logger.error('Passport authenticate error in authenticating');
                     return res.status(500).end(); 
                 }
+                
+                if (!user) { 
+                    return res.status(404).end(); 
+                }
 
-                return res.send({ users: [removePassword(user)] } );
-            });
-        })(req, res);
+                req.logIn(user, function(err) {
+                    if (err) { 
+                        logger.info('if err in req.login() user.id: ', user);
+                        logger.error('Something wrong with res.login()', err);
+                        return res.status(500).end(); 
+                    }
+
+                    return res.send({ users: [removePassword(user)] } );
+                });
+            })(req, res);
+        });
     }        
     //Used when viewing other users profile. 
     //If he is logged in then it will fire true and return the current user;
@@ -142,21 +148,32 @@ router.post('/', function (req, res) {
 
         User.findOne({ id: req.body.user.id }, function (err, user) {
             if (user) {
-                logger.debug('user already in db: ', req.body.user);
+                logger.debug('user already in db: ', removePassword(req.body.user));
                 return res.status(403).end();
             } else {
                 logger.info('compare: ', req.body.user.id, user);
 
-                User.create(req.body.user, function (err, user) {
-                    if (err) return res.status(403).end();
-                    logger.info('User Created: ', user.id);
-                    req.login(req.body.user, function(err) {
-                        logger.info('req.login');
-                        if (err) { return res.status(500).end(); }
-                        var u = removePassword(user);
-                        return res.send({user: u});
+                var bcrypt = require('bcrypt');
+                bcrypt.genSalt(10, function(err, salt) {
+                    bcrypt.hash(req.body.user.password, salt, function(err, hash) {
+                        if(err) return res.status(403).end();
+                        // Store hash in your password DB.
+                        req.body.user.password = hash;
+                        User.create(req.body.user, function (err, user) {
+                            if (err) return res.status(403).end();
+                            logger.info('User Created: ', user);
+                            req.login(req.body.user, function(err) {
+                                logger.info('req.login');
+                                if (err) { return res.status(500).end(); }
+                                var u = removePassword(user);
+                                return res.send({user: u});
+                            });
+                        });    
+
                     });
-                });    
+                });
+
+                
             }
         });
     } else {

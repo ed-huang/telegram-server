@@ -3,6 +3,7 @@ var db = require('./../database/database');
 var User = db.model('User');
 var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
+var bcrypt = require('bcrypt');
 
 passport.use(new LocalStrategy(
     function (username, password, done) {
@@ -17,12 +18,18 @@ passport.use(new LocalStrategy(
                 logger.warn('User is incorrect.');
                 return done(null, false, { message: 'Incorrect username' } );
             }
-            if (user.password !== password) {
-                logger.warn('Password is incorrect.');
-                return done(null, false, { message: 'Incorrect password.' } );
-            }
-            logger.info('local returning user: ', user.id);
-            return done(null, user);
+
+            bcrypt.compare(password, user.password, function(err, res) {
+                if(res) {
+                    logger.info('Bcrypt passed');
+                    logger.info('local returning user: ', user.id);
+                    return done(null, user);
+                } else {
+                    logger.info('Bcrypt failed: ', 'query: ',password, 'user: ', user.password);
+                    logger.warn('Password is incorrect.');
+                    return done(null, false, { message: 'Incorrect password.' } );
+                }
+            });
         });
     })
 );
