@@ -123,8 +123,6 @@ router.get('/', function(req, res) {
         var salt = bcrypt.genSaltSync(10);
         var hash = bcrypt.hashSync(savedPassword, salt);
         
-        
-
         bcrypt.genSalt(10, function(err, salt) {
             bcrypt.hash(savedPassword, salt, function(err, hash) {
                 if(err) return res.status(403).end();
@@ -142,7 +140,7 @@ router.get('/', function(req, res) {
                     //The email to contact
                       to: req.query.email,
                     //Subject and text data  
-                      subject: 'Hello from Mailgun 2',
+                      subject: 'Hello from Tele-APP',
                       html: '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'+
                                 '<html xmlns="http://www.w3.org/1999/xhtml">'+
                                     '<body>'+
@@ -168,12 +166,9 @@ router.get('/', function(req, res) {
                             return res.send({users: {} });
                         }
                     });
-                    
                 });
             });
         });
-
-        
     }
 
     else if (req.query.operation === 'logout') {
