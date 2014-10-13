@@ -25,7 +25,7 @@ passport.use(new LocalStrategy(
                     logger.info('local returning user: ', user.id);
                     return done(null, user);
                 } else {
-                    logger.info('Bcrypt failed: ', 'query: ',password, 'user: ', user.password);
+                    logger.info('Bcrypt failed: ', 'query: ',password, ' user: ', user.password);
                     logger.warn('Password is incorrect.');
                     return done(null, false, { message: 'Incorrect password.' } );
                 }

@@ -30,7 +30,7 @@ router.get('/', function (req, res) {
         var emberPosts = [];
         posts.forEach(function (post) {
             var emberPost = {
-                // id: post._id,
+                id: post._id,
                 author: post.author, 
                 text: post.text,
                 timestamp: post.timestamp
@@ -63,7 +63,7 @@ router.post('/', ensureAuthenticated, function (req, res) {
             logger.info('Post Record Created: ', post.text);
             
             var emberPost = {
-                // id: post._id,
+                id: post._id,
                 author: req.user.id,
                 text: post.text,
                 timestamp: post.timestamp

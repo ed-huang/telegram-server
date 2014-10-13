@@ -11,6 +11,9 @@
     "express": "4.x",
     "express-session": "~1.7.6",
     "mongoose": "~3.8.15",
-    "nlogger": "~0.4.0"
+    "nlogger": "~0.4.0",
+    "mailgun-js": "~0.6.7",
+    "password-generator": "~0.2.2",
+    "MD5": "~1.2.1"
   }
 }

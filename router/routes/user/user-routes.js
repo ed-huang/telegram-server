@@ -4,6 +4,16 @@ var express = require('express');
 var async = require('async');
 var passport = require('../../../passport/passport-aunthenticate');
 var bcrypt = require('bcrypt');
+var Mailgun = require('mailgun-js');
+var api_key = 'key-b6ea8386c4d7bc95a3129bf21c000963';
+var generatePassword = require('password-generator');
+var md5 = require('MD5');
+
+//Your domain, from the Mailgun Control Panel
+var domain = 'sandboxe121af1225264126bd720fce94a29d5c.mailgun.org';
+
+//Your sending email address
+var from_who = 'ed@edhuang.com';
 
 var router = express.Router();
 var db = require('../../../database/database.js');
@@ -101,13 +111,76 @@ router.get('/', function(req, res) {
                 return res.send({ users: emberArray });
             });
         });
-    } 
+    }
+
+    else if (req.query.operation === 'reset') {
+        logger.info('Reset Password');
+
+        var newPassword = generatePassword();
+
+        var savedPassword = md5(newPassword + req.query.username);
+
+        var salt = bcrypt.genSaltSync(10);
+        var hash = bcrypt.hashSync(savedPassword, salt);
+        
+        
+
+        bcrypt.genSalt(10, function(err, salt) {
+            bcrypt.hash(savedPassword, salt, function(err, hash) {
+                if(err) return res.status(403).end();
+                // Store hash in your password DB.
+                
+                User.update({id: req.query.username}, { $set: {password: hash }}, function (err, user) {
+                    if (err) return res.status(403).end();
+                    logger.info('User Updated: ', user);
+
+                    var mailgun = new Mailgun({apiKey: api_key, domain: domain});
+
+                    var data = {
+                    //Specify email data
+                      from: from_who,
+                    //The email to contact
+                      to: req.query.email,
+                    //Subject and text data  
+                      subject: 'Hello from Mailgun 2',
+                      html: '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'+
+                                '<html xmlns="http://www.w3.org/1999/xhtml">'+
+                                    '<body>'+
+                                        '<p>Hey there,</p>' +
+                                        '<p>Your new password is '+newPassword+'.</p>' +
+                                        '<br/>' +
+                                        '<p>All the best,</p>' +
+                                        '<p>The Telegram App Team</p>' +
+                                    '</body>' +
+                                '</html>'
+                    }
+
+                    mailgun.messages().send(data, function (err, body) {
+                    //If there is an error, render the error page
+                        if (err) {
+                            res.render('error', { error : err});
+                            console.log("got an error: ", err);
+                        }
+                        //Else we can greet    and leave
+                        else {
+                            //Here "submitted.jade" is the view file for this landing page 
+                            //We pass the variable "email" from the url parameter in an object rendered by Jade
+                            return res.send({users: {} });
+                        }
+                    });
+                    
+                });
+            });
+        });
+
+        
+    }
 
     else if (req.query.operation === 'logout') {
         logger.info('Logging Out');
         req.logout();
         // return res.status(200).end();
-        return res.send({ users: {} } );    
+        return res.send({ users: {} });    
     } 
 
     else {
@@ -153,7 +226,6 @@ router.post('/', function (req, res) {
             } else {
                 logger.info('compare: ', req.body.user.id, user);
 
-                var bcrypt = require('bcrypt');
                 bcrypt.genSalt(10, function(err, salt) {
                     bcrypt.hash(req.body.user.password, salt, function(err, hash) {
                         if(err) return res.status(403).end();
