@@ -3,6 +3,7 @@ var express = require('express');
 var router = express.Router();
 var db = require('../../../database/database');
 var Post = db.model('Post');
+var User = db.model('User');
 
 /**
 * Requesting posts from the Posts Stream 
@@ -14,6 +15,8 @@ router.get('/', function (req, res) {
     logger.info('GET on /api/posts');
 
     var query = {};
+    var emberPosts = [];
+    var users = [];
     
     if (req.query.operation === 'dashboard') {
         if (req.user) {
@@ -27,7 +30,6 @@ router.get('/', function (req, res) {
 
     Post.find(query, function (err, posts) {
         if (err) return res.status(403).end();
-        var emberPosts = [];
         posts.forEach(function (post) {
             var emberPost = {
                 id: post._id,
@@ -36,9 +38,13 @@ router.get('/', function (req, res) {
                 timestamp: post.timestamp
             }
             emberPosts.push(emberPost);
-
+            users.push(post.author);
         });
-        return res.send({ posts: emberPosts } );
+
+        User.find({ id: { $in: users }}, function (err, users) {
+            if (err) return res.status(403).end();
+            return res.send({ posts: emberPosts, users: users } );
+        });
     });
 });
 
