@@ -26,6 +26,7 @@ router.get('/', function(req, res) {
     logger.info('GET /users/');
 
     if (req.query.operation === 'login') {
+        //break into ffunctions
         logger.info('req.query.operation = login - username: ', req.query.username);
 
         User.findOne({id: req.query.username}, function (err, user) {
@@ -348,7 +349,9 @@ logger.info('fn removePassword user: ', user);
     var copy = {
         id: user.id,
         name: user.name,
-        picture: '/assets/images/cristian-strat.png'
+        picture: '/assets/images/cristian-strat.png',
+        followers: user.followers.slice(),
+        following: user.following.slice()
     };
     return copy;
 }

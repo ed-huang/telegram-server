@@ -20,6 +20,7 @@ router.get('/', function (req, res) {
     
     if (req.query.operation === 'dashboard') {
         if (req.user) {
+            //combine arrays of following and user.id $or is difficult for mongo
             query = { $or: [{ author : { $in: req.user.following }}, { author: req.user.id }]};
             logger.info('this is query: ', query);    
         }
@@ -43,7 +44,18 @@ router.get('/', function (req, res) {
 
         User.find({ id: { $in: users }}, function (err, users) {
             if (err) return res.status(403).end();
-            return res.send({ posts: emberPosts, users: users } );
+            var copyUsers = [];
+            users.forEach(function (user) {
+                var u = {
+                    id: user.id,
+                    name: user.name,
+                    picture: user.picture,
+                    followers: user.followers.slice(),
+                    following: user.following.slice()
+                }
+                copyUsers.push(u);
+            });
+            return res.send({ posts: emberPosts, users: copyUsers } );
         });
     });
 });
@@ -54,13 +66,14 @@ router.get('/', function (req, res) {
 router.post('/', ensureAuthenticated, function (req, res) {
     logger.info('posts request');
 
-    var post = {
-        author: req.body.post.author,
-        text: req.body.post.text,
-        timestamp: req.body.post.timestamp
-    };
+    
 
     if (req.user.id === post.author) {
+        var post = {
+            author: req.body.post.author,
+            text: req.body.post.text,
+            timestamp: req.body.post.timestamp
+        };
         logger.info('id and author passed');
 
         Post.create(post, function (err, post) {
