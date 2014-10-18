@@ -64,16 +64,17 @@ router.get('/', function (req, res) {
 * Creating a post. Most Likely from the dashboard.
 */
 router.post('/', ensureAuthenticated, function (req, res) {
-    logger.info('posts request');
+    logger.info('posts request err??');
 
-    
+    if (req.user.id === req.body.post.author) {
+        logger.info('user.id same as post author');
 
-    if (req.user.id === post.author) {
         var post = {
             author: req.body.post.author,
             text: req.body.post.text,
             timestamp: req.body.post.timestamp
         };
+
         logger.info('id and author passed');
 
         Post.create(post, function (err, post) {
@@ -91,7 +92,7 @@ router.post('/', ensureAuthenticated, function (req, res) {
             return res.send({ post: emberPost });
         });
     } else {
-        logger.warning('user tried unauthorized post');
+        logger.error('user tried unauthorized post');
         return res.status(403).end();
     }
 });

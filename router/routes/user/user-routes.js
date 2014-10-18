@@ -1,29 +1,35 @@
 
 var logger = require('nlogger').logger(module);
+logger.info('user-routes loaded');
 var express = require('express');
 var async = require('async');
 var passport = require('../../../passport/passport-aunthenticate');
 var bcrypt = require('bcrypt');
-var Mailgun = require('mailgun-js');
+//var Mailgun = require('mailgun-js');
 var api_key = 'key-b6ea8386c4d7bc95a3129bf21c000963';
 var generatePassword = require('password-generator');
 var md5 = require('MD5');
 
 //Your domain, from the Mailgun Control Panel
-var domain = 'sandboxe121af1225264126bd720fce94a29d5c.mailgun.org';
+//var domain = 'sandboxe121af1225264126bd720fce94a29d5c.mailgun.org';
 
 //Your sending email address
-var from_who = 'ed@edhuang.com';
+//var MAILGUN_SENDER_EMAIL = require('../../../config').MAILGUN_SENDER_EMAIL;
 
 var router = express.Router();
 var db = require('../../../database/database.js');
 var User = db.model('User');
 
+var userUtil = require('./user-util');
+
+var mailgun = require('../../../mailgun/mailgun-mailserver');
+logger.info('mailgun: ', mailgun);
+
 /**
 * User LOGIN or get users. Used for following and follower stream
 */
 router.get('/', function(req, res) {
-    logger.info('GET /users/');
+    logger.info('GET /users/ --- ', req.query.operation);
 
     if (req.query.operation === 'login') {
         //break into ffunctions
@@ -52,19 +58,17 @@ router.get('/', function(req, res) {
                         return res.status(500).end(); 
                     }
 
-                    return res.send({ users: [removePassword(user)] } );
+                    return res.send({ users: [ userUtil.removePassword(user) ]} );
                 });
             })(req, res);
         });
-    }        
-    //Used when viewing other users profile. 
-    //If he is logged in then it will fire true and return the current user;
-    
+    } 
+
     else if (req.query.operation === 'authenticating') {
         logger.info('isAuthenticated: ', req.isAuthenticated());
         
         if (req.isAuthenticated()) {
-            return res.send({ users:[removePassword(req.user)] });
+            return res.send({ users:[userUtil.removePassword(req.user)] });
         } else {
             return res.send({ users: [] } );    
         }
@@ -82,8 +86,8 @@ router.get('/', function(req, res) {
                 if (err) return res.status(403).end();
                 //*** maybe use forEach ?
                 following.forEach(function (follower) {
-                    var u = removePassword(follower);
-                    u = setIsFollowed(u, req.user);
+                    var u = userUtil.removePassword(follower);
+                    u = userUtil.setIsFollowed(u, req.user);
                     emberArray.push(u);
                 });
                 
@@ -104,8 +108,8 @@ router.get('/', function(req, res) {
                 if (err) return res.status(403).end();
 
                 followers.forEach(function (follower) {
-                    var u = removePassword(follower);
-                    u = setIsFollowed(u, req.user);
+                    var u = userUtil.removePassword(follower);
+                    u = userUtil.setIsFollowed(u, req.user);
                     emberArray.push(u);
                 });
 
@@ -133,11 +137,11 @@ router.get('/', function(req, res) {
                     if (err) return res.status(403).end();
                     logger.info('User Updated: ', user);
 
-                    var mailgun = new Mailgun({apiKey: api_key, domain: domain});
+                    //var mailgun = new Mailgun({apiKey: api_key, domain: domain});
 
                     var data = {
                     //Specify email data
-                      from: from_who,
+                      from: 'ed@edhuang.com',
                     //The email to contact
                       to: req.query.email,
                     //Subject and text data  
@@ -201,7 +205,7 @@ router.get('/:user_id', function (req, res) {
 
         if (err) { return res.status(500).end() };
         if(!user) { return res.status(404).end() };
-        return res.send({ 'user': removePassword(user) });
+        return res.send({ 'user': userUtil.removePassword(user) });
     });
 });
 
@@ -217,7 +221,7 @@ router.post('/', function (req, res) {
 
         User.findOne({ id: req.body.user.id }, function (err, user) {
             if (user) {
-                logger.debug('user already in db: ', removePassword(req.body.user));
+                logger.debug('user already in db: ', userUtil.removePassword(req.body.user));
                 return res.status(403).end();
             } else {
                 logger.info('compare: ', req.body.user.id, user);
@@ -233,7 +237,7 @@ router.post('/', function (req, res) {
                             req.login(req.body.user, function(err) {
                                 logger.info('req.login');
                                 if (err) { return res.status(500).end(); }
-                                var u = removePassword(user);
+                                var u = userUtil.removePassword(user);
                                 return res.send({user: u});
                             });
                         });    
@@ -251,7 +255,7 @@ router.post('/', function (req, res) {
 });
 
 //api/user/follow
-router.post('/follow', ensureAuthenticated, function (req, res) {
+router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
     logger.info('POST on api/follow: ',req.user, ' ', req.body);
     
     async.parallel({ 
@@ -287,7 +291,7 @@ router.post('/follow', ensureAuthenticated, function (req, res) {
     });
 });
 
-router.post('/unfollow', ensureAuthenticated, function (req, res) {
+router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
     logger.info('POST on api/unfollow: ',req.user, ' ', req.body);
 
     async.parallel({ 
@@ -330,41 +334,6 @@ router.get('/logout', function (req, res) {
     req.logout();
     return res.status(200).end();
 });
-
-function setIsFollowed (user, loggedInUser) {
-
-    if (loggedInUser) {
-        var userIsFollowing = loggedInUser.following.indexOf(user.id) !== -1 ? true : false;
-        if (userIsFollowing) {
-            user.isFollowed = true;
-        } else {
-            user.isFollowed = false;
-        }
-    }
-    return user;
-}
-
-function removePassword (user) {
-logger.info('fn removePassword user: ', user);
-    var copy = {
-        id: user.id,
-        name: user.name,
-        picture: '/assets/images/cristian-strat.png',
-        followers: user.followers.slice(),
-        following: user.following.slice()
-    };
-    return copy;
-}
-
-function ensureAuthenticated (req, res, next) {
-    logger.info('ensureAuthticated: ', req.isAuthenticated());
-    if (req.isAuthenticated()) {
-        logger.info('isAuthenticated');
-        return next();
-    } else {
-        return res.status(403);
-    }
-}
 
 
 module.exports = router;
