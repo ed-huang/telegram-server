@@ -20,8 +20,9 @@ router.get('/', function (req, res) {
     
     if (req.query.operation === 'dashboard') {
         if (req.user) {
-            //combine arrays of following and user.id $or is difficult for mongo
-            query = { $or: [{ author : { $in: req.user.following }}, { author: req.user.id }]};
+            var searchArray = req.user.following.slice(0);
+            searchArray.push(req.user.id);
+            query = { author: { $in: searchArray }};
             logger.info('this is query: ', query);    
         }
         

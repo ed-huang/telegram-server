@@ -1,38 +1,58 @@
-
+//sort aphbetically
 var logger = require('nlogger').logger(module);
 logger.info('user-routes loaded');
 var express = require('express');
 var async = require('async');
 var passport = require('../../../passport/passport-aunthenticate');
-var bcrypt = require('bcrypt');
-//var Mailgun = require('mailgun-js');
-var api_key = 'key-b6ea8386c4d7bc95a3129bf21c000963';
+
 var generatePassword = require('password-generator');
 var md5 = require('MD5');
-
-//Your domain, from the Mailgun Control Panel
-//var domain = 'sandboxe121af1225264126bd720fce94a29d5c.mailgun.org';
-
-//Your sending email address
-//var MAILGUN_SENDER_EMAIL = require('../../../config').MAILGUN_SENDER_EMAIL;
 
 var router = express.Router();
 var db = require('../../../database/database.js');
 var User = db.model('User');
-
 var userUtil = require('./user-util');
 
 var mailgun = require('../../../mailgun/mailgun-mailserver');
-logger.info('mailgun: ', mailgun);
+
+var hb = require('handlebars');
 
 /**
 * User LOGIN or get users. Used for following and follower stream
 */
 router.get('/', function(req, res) {
-    logger.info('GET /users/ --- ', req.query.operation);
+    logger.info('GET /users/');
+    var operation = req.query.operation;
+    
+    switch (operation) {
+        case 'login':
+            handleLoginRequest(req, res);
+            break;
+        case 'authenticating':
+            handleAuthenticatingRequest(req, res);
+            break;
+        case 'following':
+            handleFollowingRequest(req, res);
+            break;
+        case 'followers':
+            handleFollowersRequest(req, res);
+            break;
+        case 'reset':
+            handleResetRequest(req, res);
+            break;
+        case 'logout':
+            handleLogoutRequest(req, res);
+            break;
+        default:
+            logger.info('find all users');
+            User.find({}, function (err, users) {
+                return res.send({ users: users } );    
+            });
+            break;
+    }
 
-    if (req.query.operation === 'login') {
-        //break into ffunctions
+
+    function handleLoginRequest (req, res) {
         logger.info('req.query.operation = login - username: ', req.query.username);
 
         User.findOne({id: req.query.username}, function (err, user) {
@@ -58,27 +78,27 @@ router.get('/', function(req, res) {
                         return res.status(500).end(); 
                     }
 
-                    return res.send({ users: [ userUtil.removePassword(user) ]} );
+                    return res.send({ users: [ userUtil.createClientUser(user, req.user) ]} );
                 });
             })(req, res);
         });
-    } 
+    }
 
-    else if (req.query.operation === 'authenticating') {
+    function handleAuthenticatingRequest (req, res) {
         logger.info('isAuthenticated: ', req.isAuthenticated());
         
         if (req.isAuthenticated()) {
-            return res.send({ users:[userUtil.removePassword(req.user)] });
+            return res.send({ users:[userUtil.createClientUser(null, req.user)] });
         } else {
             return res.send({ users: [] } );    
         }
-    } 
 
-    else if (req.query.operation === 'following') {
+    }
+
+    function handleFollowingRequest (req, res) {
         logger.info('GET /users/ req.query.operation = following - req.query.curUser: ', req.query.curUser);
         
         var emberArray = [];
-        
         User.findOne({ id: req.query.curUser }, function (err, curUser) {
             if (err) return res.status(403).end();
             User.find({ id: { $in: curUser.following }}, function (err, following) {
@@ -86,17 +106,17 @@ router.get('/', function(req, res) {
                 if (err) return res.status(403).end();
                 //*** maybe use forEach ?
                 following.forEach(function (follower) {
-                    var u = userUtil.removePassword(follower);
-                    u = userUtil.setIsFollowed(u, req.user);
+                    var u = userUtil.createClientUser(follower, req.user);
                     emberArray.push(u);
                 });
                 
                 return res.send({ users: emberArray });
             });
         });
-    } 
-    
-    else if (req.query.operation === 'followers') {
+
+    }
+
+    function handleFollowersRequest (req, res) {
         logger.info('Getting followers for: ', req.query.curUser);
         
         var emberArray = [];
@@ -108,8 +128,8 @@ router.get('/', function(req, res) {
                 if (err) return res.status(403).end();
 
                 followers.forEach(function (follower) {
-                    var u = userUtil.removePassword(follower);
-                    u = userUtil.setIsFollowed(u, req.user);
+                    var u = userUtil.createClientUser(follower, req.user);
+                    // u = userUtil.setIsFollowed(u, req.user);
                     emberArray.push(u);
                 });
 
@@ -117,77 +137,119 @@ router.get('/', function(req, res) {
             });
         });
     }
-
-    else if (req.query.operation === 'reset') {
+    
+    function handleResetRequest(req, res) {
         logger.info('Reset Password');
 
         var newPassword = generatePassword();
-
         var savedPassword = md5(newPassword + req.query.username);
-
-        var salt = bcrypt.genSaltSync(10);
-        var hash = bcrypt.hashSync(savedPassword, salt);
+        // var salt = bcrypt.genSaltSync(10);
+        // var hash = bcrypt.hashSync(savedPassword, salt);
+        //bcrypt is slow, use async
         
-        bcrypt.genSalt(10, function(err, salt) {
-            bcrypt.hash(savedPassword, salt, function(err, hash) {
-                if(err) return res.status(403).end();
-                // Store hash in your password DB.
-                
-                User.update({id: req.query.username}, { $set: {password: hash }}, function (err, user) {
-                    if (err) return res.status(403).end();
-                    logger.info('User Updated: ', user);
+        userUtil.encryptPassword(savedPassword, function (err, encryptedPassword) {
+            if (err) return res.status(403).end();
+            User.update({id: req.query.username}, { $set: {password: encryptedPassword }}, function (err, user) {
+                if (err) return res.status(403).end();
+                logger.info('User Updated: ', user);
 
-                    //var mailgun = new Mailgun({apiKey: api_key, domain: domain});
+                //var mailgun = new Mailgun({apiKey: api_key, domain: domain});
+                //fs.readFile('./file', function(content) {
+                //check documententation. utf-8
 
-                    var data = {
-                    //Specify email data
-                      from: 'ed@edhuang.com',
-                    //The email to contact
-                      to: req.query.email,
-                    //Subject and text data  
-                      subject: 'Hello from Tele-APP',
-                      html: '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'+
-                                '<html xmlns="http://www.w3.org/1999/xhtml">'+
-                                    '<body>'+
-                                        '<p>Hey there,</p>' +
-                                        '<p>Your new password is '+newPassword+'.</p>' +
-                                        '<br/>' +
-                                        '<p>All the best,</p>' +
-                                        '<p>The Telegram App Team</p>' +
-                                    '</body>' +
-                                '</html>'
+                //});
+
+                var data = {
+                //Specify email data
+                  from: 'ed@edhuang.com',
+                //The email to contact
+                  to: req.query.email,
+                //Subject and text data  
+                  subject: 'Hello from Tele-APP',
+                  html: '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'+
+                            '<html xmlns="http://www.w3.org/1999/xhtml">'+
+                                '<body>'+
+                                    '<p>Hey there,</p>' +
+                                    '<p>Your new password is '+newPassword+'.</p>' +
+                                    '<br/>' +
+                                    '<p>All the best,</p>' +
+                                    '<p>The Telegram App Team</p>' +
+                                '</body>' +
+                            '</html>'
+                }
+
+                mailgun.messages().send(data, function (err, body) {
+                //If there is an error, render the error page
+                    if (err) {
+                        res.render('error', { error : err});
+                        console.log("got an error: ", err);
                     }
-
-                    mailgun.messages().send(data, function (err, body) {
-                    //If there is an error, render the error page
-                        if (err) {
-                            res.render('error', { error : err});
-                            console.log("got an error: ", err);
-                        }
-                        //Else we can greet    and leave
-                        else {
-                            //Here "submitted.jade" is the view file for this landing page 
-                            //We pass the variable "email" from the url parameter in an object rendered by Jade
-                            return res.send({users: {} });
-                        }
-                    });
+                    //Else we can greet    and leave
+                    else {
+                        //Here "submitted.jade" is the view file for this landing page 
+                        //We pass the variable "email" from the url parameter in an object rendered by Jade
+                        return res.send({users: {} });
+                    }
                 });
             });
+            
         });
+        // bcrypt.genSalt(10, function(err, salt) {
+        //     bcrypt.hash(savedPassword, salt, function(err, hash) {
+        //         if(err) return res.status(403).end();
+        //         // Store hash in your password DB.
+                
+        //         // User.update({id: req.query.username}, { $set: {password: hash }}, function (err, user) {
+        //         //     if (err) return res.status(403).end();
+        //         //     logger.info('User Updated: ', user);
+
+        //         //     //var mailgun = new Mailgun({apiKey: api_key, domain: domain});
+        //         //     //fs.readFile('./file', function(content) {
+        //         //     //check documententation. utf-8
+
+        //         //     //});
+
+        //         //     var data = {
+        //         //     //Specify email data
+        //         //       from: 'ed@edhuang.com',
+        //         //     //The email to contact
+        //         //       to: req.query.email,
+        //         //     //Subject and text data  
+        //         //       subject: 'Hello from Tele-APP',
+        //         //       html: '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'+
+        //         //                 '<html xmlns="http://www.w3.org/1999/xhtml">'+
+        //         //                     '<body>'+
+        //         //                         '<p>Hey there,</p>' +
+        //         //                         '<p>Your new password is '+newPassword+'.</p>' +
+        //         //                         '<br/>' +
+        //         //                         '<p>All the best,</p>' +
+        //         //                         '<p>The Telegram App Team</p>' +
+        //         //                     '</body>' +
+        //         //                 '</html>'
+        //         //     }
+
+        //         //     mailgun.messages().send(data, function (err, body) {
+        //         //     //If there is an error, render the error page
+        //         //         if (err) {
+        //         //             res.render('error', { error : err});
+        //         //             console.log("got an error: ", err);
+        //         //         }
+        //         //         //Else we can greet    and leave
+        //         //         else {
+        //         //             //Here "submitted.jade" is the view file for this landing page 
+        //         //             //We pass the variable "email" from the url parameter in an object rendered by Jade
+        //         //             return res.send({users: {} });
+        //         //         }
+        //         //     });
+        //         // });
+        //     });
+        // });
     }
 
-    else if (req.query.operation === 'logout') {
+    function handleLogoutRequest(req, res) {
         logger.info('Logging Out');
         req.logout();
-        // return res.status(200).end();
         return res.send({ users: {} });    
-    } 
-
-    else {
-        logger.info('find all users');
-        User.find({}, function (err, users) {
-            return res.send({ users: users } );    
-        })
     }
 });
 
@@ -205,7 +267,7 @@ router.get('/:user_id', function (req, res) {
 
         if (err) { return res.status(500).end() };
         if(!user) { return res.status(404).end() };
-        return res.send({ 'user': userUtil.removePassword(user) });
+        return res.send({ 'user': userUtil.createClientUser(user) });
     });
 });
 
@@ -217,35 +279,28 @@ router.post('/', function (req, res) {
     logger.info('CREATE USER - POST to api/users: ', req.body.user);
 
     if (req.body.user) {
-        req.body.user.isFollowed = true;
 
         User.findOne({ id: req.body.user.id }, function (err, user) {
             if (user) {
-                logger.debug('user already in db: ', userUtil.removePassword(req.body.user));
+                logger.debug('user already in db: ', userUtil.createClientUser(req.body.user));
                 return res.status(403).end();
             } else {
                 logger.info('compare: ', req.body.user.id, user);
-
-                bcrypt.genSalt(10, function(err, salt) {
-                    bcrypt.hash(req.body.user.password, salt, function(err, hash) {
-                        if(err) return res.status(403).end();
-                        // Store hash in your password DB.
-                        req.body.user.password = hash;
-                        User.create(req.body.user, function (err, user) {
-                            if (err) return res.status(403).end();
-                            logger.info('User Created: ', user);
-                            req.login(req.body.user, function(err) {
-                                logger.info('req.login');
-                                if (err) { return res.status(500).end(); }
-                                var u = userUtil.removePassword(user);
-                                return res.send({user: u});
-                            });
-                        });    
-
-                    });
+                userUtil.encryptPassword(req.body.user.password, function(err, encryptedPassword) {
+                   if(err) return res.status(403).end();
+                    req.body.user.password = encryptedPassword;
+                    req.body.user.picture = '/assets/images/christian-strat.png';
+                    User.create(req.body.user, function (err, user) {
+                        if (err) return res.status(403).end();
+                        logger.info('User Created: ', user);
+                        req.login(req.body.user, function(err) {
+                            logger.info('req.login');
+                            if (err) { return res.status(500).end(); }
+                            var u = userUtil.createClientUser(user);
+                            return res.send({user: u});
+                        });
+                    }); 
                 });
-
-                
             }
         });
     } else {
@@ -260,6 +315,8 @@ router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
     
     async.parallel({ 
         setFollowing: function(cb) {
+            // userUtil.setFollowing(req.user.id, req.body.user.id, cb);
+
             logger.info('setFollowing()');
             User.findOneAndUpdate( 
                 { id: req.user.id },
@@ -294,7 +351,21 @@ router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
 router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
     logger.info('POST on api/unfollow: ',req.user, ' ', req.body);
 
-    async.parallel({ 
+    function unFollowUser (fnc, user, followers) {
+        User.findOneAndUpdate( 
+            { id: req.user.id },
+            { $pull: query},
+            { safe: true, upsert: true },
+            function (err, user) {
+                console.log(err);
+                return fnc(null, {user: user});
+            }
+        );   
+    }
+
+    async.parallel({
+
+
         setFollowing: function(cb) {
             User.findOneAndUpdate( 
                 { id: req.user.id },
