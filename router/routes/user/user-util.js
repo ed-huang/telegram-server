@@ -25,7 +25,7 @@ userUtil.setClientUser = function (user, loggedInUser) {
         var copy = {
             id: copyUser.id,
             name: copyUser.name,
-            picture: '/assets/images/christian-strat.png'
+            picture: copyUser.picture
         };
     }
     
@@ -55,3 +55,10 @@ userUtil.encryptPassword = function (savedPassword, cb) {
         });
     });
 };
+
+userUtil.assignAvatar = function () {
+    var avatars = ['avatar-yellow.png', 'avatar-orange.png', 'avatar-blue.png', 'avatar-green.png', 'avatar-red.png'];
+    var key = Math.floor(Math.random() * avatars.length);
+    var image = '/assets/images/avatars/' + avatars[key];
+    return image;
+}

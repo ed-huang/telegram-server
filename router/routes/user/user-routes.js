@@ -187,7 +187,7 @@ router.post('/', function (req, res) {
                 userUtil.encryptPassword(req.body.user.password, function(err, encryptedPassword) {
                    if(err) return res.status(403).end();
                     req.body.user.password = encryptedPassword;
-                    req.body.user.picture = '/assets/images/christian-strat.png';
+                    req.body.user.picture = userUtil.assignAvatar();
                     User.create(req.body.user, function (err, user) {
                         if (err) return res.status(403).end();
                         logger.info('User Created: ', user);
