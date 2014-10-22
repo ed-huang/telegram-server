@@ -1,8 +1,46 @@
+var config = require('../config').mailgun;
+var fs = require('fs');
+var Handlebars = require('handlebars');
+var logger = require('nlogger').logger(module);
 var Mailgun = require('mailgun-js');
-var mailConfig = require('../config').mailgun;
-var mailgun = new Mailgun({
-    apiKey: mailConfig.MAILGUN_API_KEY, 
-    domain: mailConfig.MAILGUN_DOMAIN
+
+var myMailgun = new Mailgun({
+    apiKey: config.MAILGUN_API_KEY, 
+    domain: config.MAILGUN_DOMAIN
 });
 
-module.exports = mailgun;
+var mailgun = exports;
+
+mailgun.sendNewPassword = function (email, newPassword) {
+    
+    fs.readFile('./mailgun/templates/reset.hbs', { encoding: 'utf8' }, function (err, content) {
+        logger.info('sending new password');
+        var template = Handlebars.compile(content);
+        var message = template({newPassword: newPassword});
+        var subject = "Hello From Tele-App";
+        
+        if (err) {
+            logger.info(err);
+        }
+        var data = {
+            from: config.MAILGUN_SENDER_EMAIL,
+            to: email,
+            subject: subject,
+            html: message
+        }
+       
+        myMailgun.messages().send(data, function (err, body) {
+            if (err) {
+                logger.error("Something wrong with mailgun send: ", err);
+            }
+            else {
+                logger.info('body: ', body);
+                return res.send({users: {} });
+            }
+        });
+    });
+}
+
+
+
+

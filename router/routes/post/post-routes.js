@@ -12,15 +12,14 @@ var userUtil = require('../user/user-util');
 */
 
 router.get('/', function (req, res) {
-    
     logger.info('GET on /api/posts');
-
-    var query = {};
-    var emberPosts = [];
-    
     
     if (req.query.operation === 'dashboard') {
+        logger.info('GET posts for dashboard');
         var users = [];
+        var query = {};
+        var emberPosts = [];
+        
         if (req.user) {
             var searchArray = req.user.following.slice(0);
             searchArray.push(req.user.id);
@@ -44,7 +43,7 @@ router.get('/', function (req, res) {
                     if (err) return res.status(403).end();
                     var copyUsers = [];
                     users.forEach(function (user) {
-                        var u = userUtil.createClientUser(user, req.user);
+                        var u = userUtil.setClientUser(user, req.user);
                         copyUsers.push(u);
                     });
                     return res.send({ posts: emberPosts, users: copyUsers } );
@@ -53,9 +52,11 @@ router.get('/', function (req, res) {
         }
         
     } else if (req.query.operation === 'index') {
-        logger.info('index route');
-        query = { author: req.query.author };
-        var author = userUtil.createClientUser(req.query.author, req.user);
+        logger.info('GET posts for user/index route');
+        var emberPosts = [];
+        var query = { author: req.query.author };
+
+        var author = userUtil.setClientUser(req.query.author, req.user);
         Post.find(query, function (err, posts) {
             if (err) return res.status(403).end();
             posts.forEach(function (post) {
@@ -69,6 +70,8 @@ router.get('/', function (req, res) {
             });
             return res.send({ posts: emberPosts } );
         });
+    } else {
+        return res.status(500).end();
     }
 });
 

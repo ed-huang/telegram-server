@@ -1,50 +1,9 @@
 var bcrypt = require('bcrypt');
 var logger = require('nlogger').logger(module);
-logger.info('loaded user-util');
-// module.exports = {
-
-
-//     setIsFollowed: function (user, loggedInUser) {
-
-//         if (loggedInUser) {
-//             var userIsFollowing = loggedInUser.following.indexOf(user.id) !== -1 ? true : false;
-//             if (userIsFollowing) {
-//                 user.isFollowed = true;
-//             } else {
-//                 user.isFollowed = false;
-//             }
-//         }
-//         return user;
-//     },
-
-//     // removePassword: function (user, loggedInUser) {
-//     removePassword: function (user) {
-//     logger.info('fn user-util removePassword user: ', user);
-//         var copy = {
-//             id: user.id,
-//             name: user.name,
-//             picture: '/assets/images/cristian-strat.png',
-//             //don't need to send follower and following
-//             followers: user.followers.slice(),
-//             following: user.following.slice()
-//         };
-//         return setIsFollowed(copy, loggedInUser);
-//     },
-
-//     ensureAuthenticated: function (req, res, next) {
-//         logger.info('ensureAuthticated: ', req.isAuthenticated());
-//         if (req.isAuthenticated()) {
-//             logger.info('isAuthenticated');
-//             return next();
-//         } else {
-//             return res.status(403);
-//         }
-//     }
-// }
-
 var userUtil  = exports;
 
 userUtil.setIsFollowed = function (user, loggedInUser) {
+    logger.info('setIsFollowed: ', user);
 
     if (loggedInUser) {
         var userIsFollowing = loggedInUser.following.indexOf(user.id) !== -1 ? true : false;
@@ -58,8 +17,9 @@ userUtil.setIsFollowed = function (user, loggedInUser) {
     return user;
 };
 
-userUtil.createClientUser = function (user, loggedInUser) {
-logger.info('fn user-util createClientUser user: ', user.id);
+userUtil.setClientUser = function (user, loggedInUser) {
+    logger.info('fn user-util setClientUser user: ', user.id);
+    
     var copyUser = user || loggedInUser;
     if(copyUser) {
         var copy = {
@@ -74,6 +34,7 @@ logger.info('fn user-util createClientUser user: ', user.id);
 
 userUtil.ensureAuthenticated = function (req, res, next) {
     logger.info('ensureAuthticated: ', req.isAuthenticated());
+    
     if (req.isAuthenticated()) {
         logger.info('isAuthenticated');
         return next();
@@ -83,6 +44,8 @@ userUtil.ensureAuthenticated = function (req, res, next) {
 };
 
 userUtil.encryptPassword = function (savedPassword, cb) {
+    logger.info('encryptPassword: ', savedPassword);
+    
     bcrypt.genSalt(10, function(err, salt) {
         logger.info('bcrypt: ', salt);
         bcrypt.hash(savedPassword, salt, function(err, hash) {
@@ -92,9 +55,3 @@ userUtil.encryptPassword = function (savedPassword, cb) {
         });
     });
 };
-
-
-userUtil.setFollowing = function (user, follower, cb) {
-    //set followers
-    //return cb(null, {user: user});
-}
