@@ -4,6 +4,7 @@ var router = express.Router();
 var db = require('../../../database/database');
 var Post = db.model('Post');
 var User = db.model('User');
+var userUtil = require('../user/user-util');
 
 /**
 * Requesting posts from the Posts Stream 
@@ -16,49 +17,59 @@ router.get('/', function (req, res) {
 
     var query = {};
     var emberPosts = [];
-    var users = [];
+    
     
     if (req.query.operation === 'dashboard') {
+        var users = [];
         if (req.user) {
             var searchArray = req.user.following.slice(0);
             searchArray.push(req.user.id);
             query = { author: { $in: searchArray }};
-            logger.info('this is query: ', query);    
+            logger.info('this is query: ', query);
+
+            Post.find(query, function (err, posts) {
+                if (err) return res.status(403).end();
+                posts.forEach(function (post) {
+                    var emberPost = {
+                        id: post._id,
+                        author: post.author, 
+                        text: post.text,
+                        timestamp: post.timestamp
+                    }
+                    emberPosts.push(emberPost);
+                    users.push(post.author);
+                });
+
+                User.find({ id: { $in: users }}, function (err, users) {
+                    if (err) return res.status(403).end();
+                    var copyUsers = [];
+                    users.forEach(function (user) {
+                        var u = userUtil.createClientUser(user, req.user);
+                        copyUsers.push(u);
+                    });
+                    return res.send({ posts: emberPosts, users: copyUsers } );
+                });
+            });
         }
         
-    } else {
-        query = req.query.author ? { author: req.query.author } : {} ;
-    }
-
-    Post.find(query, function (err, posts) {
-        if (err) return res.status(403).end();
-        posts.forEach(function (post) {
-            var emberPost = {
-                id: post._id,
-                author: post.author, 
-                text: post.text,
-                timestamp: post.timestamp
-            }
-            emberPosts.push(emberPost);
-            users.push(post.author);
-        });
-
-        User.find({ id: { $in: users }}, function (err, users) {
+    } else if (req.query.operation === 'index') {
+        logger.info('index route');
+        query = { author: req.query.author };
+        var author = userUtil.createClientUser(req.query.author, req.user);
+        Post.find(query, function (err, posts) {
             if (err) return res.status(403).end();
-            var copyUsers = [];
-            users.forEach(function (user) {
-                var u = {
-                    id: user.id,
-                    name: user.name,
-                    picture: user.picture,
-                    followers: user.followers.slice(),
-                    following: user.following.slice()
+            posts.forEach(function (post) {
+                var emberPost = {
+                    id: post._id,
+                    author: post.author, 
+                    text: post.text,
+                    timestamp: post.timestamp
                 }
-                copyUsers.push(u);
+                emberPosts.push(emberPost);
             });
-            return res.send({ posts: emberPosts, users: copyUsers } );
+            return res.send({ posts: emberPosts } );
         });
-    });
+    }
 });
 
 /**

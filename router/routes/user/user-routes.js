@@ -1,21 +1,15 @@
-//sort aphbetically
-var logger = require('nlogger').logger(module);
-logger.info('user-routes loaded');
-var express = require('express');
 var async = require('async');
-var passport = require('../../../passport/passport-aunthenticate');
-
-var generatePassword = require('password-generator');
-var md5 = require('MD5');
-
-var router = express.Router();
 var db = require('../../../database/database.js');
+var express = require('express');
+var hb = require('handlebars');
+var logger = require('nlogger').logger(module);
+var mailgun = require('../../../mailgun/mailgun-mailserver');
+var md5 = require('MD5');
+var passport = require('../../../passport/passport-aunthenticate');
+var passwordGenerator = require('password-generator');
+var router = express.Router();
 var User = db.model('User');
 var userUtil = require('./user-util');
-
-var mailgun = require('../../../mailgun/mailgun-mailserver');
-
-var hb = require('handlebars');
 
 /**
 * User LOGIN or get users. Used for following and follower stream
@@ -25,23 +19,24 @@ router.get('/', function(req, res) {
     var operation = req.query.operation;
     
     switch (operation) {
-        case 'login':
-            handleLoginRequest(req, res);
-            break;
         case 'authenticating':
             handleAuthenticatingRequest(req, res);
-            break;
-        case 'following':
-            handleFollowingRequest(req, res);
             break;
         case 'followers':
             handleFollowersRequest(req, res);
             break;
-        case 'reset':
-            handleResetRequest(req, res);
+        case 'following':
+            handleFollowingRequest(req, res);
+            break;
+
+        case 'login':
+            handleLoginRequest(req, res);
             break;
         case 'logout':
             handleLogoutRequest(req, res);
+            break;
+        case 'reset':
+            handleResetRequest(req, res);
             break;
         default:
             logger.info('find all users');
@@ -51,6 +46,58 @@ router.get('/', function(req, res) {
             break;
     }
 
+    function handleAuthenticatingRequest (req, res) {
+        logger.info('isAuthenticated: ', req.isAuthenticated());
+        
+        if (req.isAuthenticated()) {
+            return res.send({ users:[req.user] });
+        } else {
+            return res.send({ users: [] } );    
+        }
+    }
+
+    function handleFollowersRequest (req, res) {
+        logger.info('Getting followers for: ', req.query.curUser);
+        
+        var emberArray = [];
+        
+        User.findOne({ id: req.query.curUser }, function (err, curUser) {
+            if (err) return res.status(403).end();
+            
+            User.find({ id: { $in: curUser.followers }}, function (err, followers) {
+                if (err) return res.status(403).end();
+
+                followers.forEach(function (follower) {
+                    var u = userUtil.createClientUser(follower, req.user);
+                    // u = userUtil.setIsFollowed(u, req.user);
+                    emberArray.push(u);
+                });
+
+                return res.send({ users: emberArray });
+            });
+        });
+    }
+
+    function handleFollowingRequest (req, res) {
+        logger.info('GET /users/ req.query.operation = following - req.query.curUser: ', req.query.curUser);
+        
+        var emberArray = [];
+        User.findOne({ id: req.query.curUser }, function (err, curUser) {
+            if (err) return res.status(403).end();
+            User.find({ id: { $in: curUser.following }}, function (err, following) {
+                logger.info('Fn find() curUser.following - following: ', curUser.following);
+                if (err) return res.status(403).end();
+                //*** maybe use forEach ?
+                following.forEach(function (follower) {
+                    var u = userUtil.createClientUser(follower, req.user);
+                    emberArray.push(u);
+                });
+                
+                return res.send({ users: emberArray });
+            });
+        });
+
+    }
 
     function handleLoginRequest (req, res) {
         logger.info('req.query.operation = login - username: ', req.query.username);
@@ -84,64 +131,16 @@ router.get('/', function(req, res) {
         });
     }
 
-    function handleAuthenticatingRequest (req, res) {
-        logger.info('isAuthenticated: ', req.isAuthenticated());
-        
-        if (req.isAuthenticated()) {
-            return res.send({ users:[userUtil.createClientUser(null, req.user)] });
-        } else {
-            return res.send({ users: [] } );    
-        }
-
+    function handleLogoutRequest(req, res) {
+        logger.info('Logging Out');
+        req.logout();
+        return res.send({ users: {} });    
     }
 
-    function handleFollowingRequest (req, res) {
-        logger.info('GET /users/ req.query.operation = following - req.query.curUser: ', req.query.curUser);
-        
-        var emberArray = [];
-        User.findOne({ id: req.query.curUser }, function (err, curUser) {
-            if (err) return res.status(403).end();
-            User.find({ id: { $in: curUser.following }}, function (err, following) {
-                logger.info('Fn find() curUser.following - following: ', curUser.following);
-                if (err) return res.status(403).end();
-                //*** maybe use forEach ?
-                following.forEach(function (follower) {
-                    var u = userUtil.createClientUser(follower, req.user);
-                    emberArray.push(u);
-                });
-                
-                return res.send({ users: emberArray });
-            });
-        });
-
-    }
-
-    function handleFollowersRequest (req, res) {
-        logger.info('Getting followers for: ', req.query.curUser);
-        
-        var emberArray = [];
-        
-        User.findOne({ id: req.query.curUser }, function (err, curUser) {
-            if (err) return res.status(403).end();
-            
-            User.find({ id: { $in: curUser.followers }}, function (err, followers) {
-                if (err) return res.status(403).end();
-
-                followers.forEach(function (follower) {
-                    var u = userUtil.createClientUser(follower, req.user);
-                    // u = userUtil.setIsFollowed(u, req.user);
-                    emberArray.push(u);
-                });
-
-                return res.send({ users: emberArray });
-            });
-        });
-    }
-    
     function handleResetRequest(req, res) {
         logger.info('Reset Password');
 
-        var newPassword = generatePassword();
+        var newPassword = passwordGenerator();
         var savedPassword = md5(newPassword + req.query.username);
         // var salt = bcrypt.genSaltSync(10);
         // var hash = bcrypt.hashSync(savedPassword, salt);
@@ -191,65 +190,8 @@ router.get('/', function(req, res) {
                         return res.send({users: {} });
                     }
                 });
-            });
-            
+            }); 
         });
-        // bcrypt.genSalt(10, function(err, salt) {
-        //     bcrypt.hash(savedPassword, salt, function(err, hash) {
-        //         if(err) return res.status(403).end();
-        //         // Store hash in your password DB.
-                
-        //         // User.update({id: req.query.username}, { $set: {password: hash }}, function (err, user) {
-        //         //     if (err) return res.status(403).end();
-        //         //     logger.info('User Updated: ', user);
-
-        //         //     //var mailgun = new Mailgun({apiKey: api_key, domain: domain});
-        //         //     //fs.readFile('./file', function(content) {
-        //         //     //check documententation. utf-8
-
-        //         //     //});
-
-        //         //     var data = {
-        //         //     //Specify email data
-        //         //       from: 'ed@edhuang.com',
-        //         //     //The email to contact
-        //         //       to: req.query.email,
-        //         //     //Subject and text data  
-        //         //       subject: 'Hello from Tele-APP',
-        //         //       html: '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'+
-        //         //                 '<html xmlns="http://www.w3.org/1999/xhtml">'+
-        //         //                     '<body>'+
-        //         //                         '<p>Hey there,</p>' +
-        //         //                         '<p>Your new password is '+newPassword+'.</p>' +
-        //         //                         '<br/>' +
-        //         //                         '<p>All the best,</p>' +
-        //         //                         '<p>The Telegram App Team</p>' +
-        //         //                     '</body>' +
-        //         //                 '</html>'
-        //         //     }
-
-        //         //     mailgun.messages().send(data, function (err, body) {
-        //         //     //If there is an error, render the error page
-        //         //         if (err) {
-        //         //             res.render('error', { error : err});
-        //         //             console.log("got an error: ", err);
-        //         //         }
-        //         //         //Else we can greet    and leave
-        //         //         else {
-        //         //             //Here "submitted.jade" is the view file for this landing page 
-        //         //             //We pass the variable "email" from the url parameter in an object rendered by Jade
-        //         //             return res.send({users: {} });
-        //         //         }
-        //         //     });
-        //         // });
-        //     });
-        // });
-    }
-
-    function handleLogoutRequest(req, res) {
-        logger.info('Logging Out');
-        req.logout();
-        return res.send({ users: {} });    
     }
 });
 
@@ -312,49 +254,79 @@ router.post('/', function (req, res) {
 //api/user/follow
 router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
     logger.info('POST on api/follow: ',req.user, ' ', req.body);
+
+    function followUser (fnc, loggedInUser, userToFollow) {
+        logger.info('setFollowing()');
+        User.findOneAndUpdate( 
+            { id: loggedInUser },
+            { $addToSet: { following: userToFollow }},
+            //***** use addToset instead of push so you get unique posts in mongodb. 
+            { safe: true, upsert: true },
+            function (err, user) {
+                console.log(err);
+                return fnc(null, {user: user});
+            }
+        );
+    }
+
+    function updateFollowersList (fnc, userBeingFollowed, loggedInUser) {
+        logger.info('setFollowers()');
+            User.findOneAndUpdate( 
+                { id: userBeingFollowed },
+                { $addToSet: { followers: loggedInUser }},
+                { safe: true, upsert: true },
+                function (err, user) {
+                    console.log(err);
+                    return fnc(null, {user: user});
+                }
+            );
+    }
     
     async.parallel({ 
         setFollowing: function(cb) {
-            // userUtil.setFollowing(req.user.id, req.body.user.id, cb);
+            var loggedInUser = req.user.id;
+            var userToFollow = req.body.id;
 
-            logger.info('setFollowing()');
-            User.findOneAndUpdate( 
-                { id: req.user.id },
-                { $addToSet: { following: req.body.id }},
-                //***** use addToset instead of push so you get unique posts in mongodb. 
-                { safe: true, upsert: true },
-                function (err, user) {
-                    console.log(err);
-                    return cb(null, {user: user});
-                }
-            );
+            followUser(cb, loggedInUser, userToFollow);
+
         },
         setFollowers: function(cb) {
-            logger.info('setFollowers()');
-            User.findOneAndUpdate( 
-                { id: req.body.id },
-                { $addToSet: { followers: req.user.id }},
-                { safe: true, upsert: true },
-                function (err, user) {
-                    console.log(err);
-                    return cb(null, {user: user});
-                }
-            );
+            var loggedInUser = req.user.id;
+            var userBeingFollowed = req.body.id;
+            
+            updateFollowersList(cb, userBeingFollowed, loggedInUser);
         }
-    }, 
+    },
+
     function (err, results) {
-        if(err) {return res.status(500).end();}
+        if(err) {
+            logger.info('error: ', err);
+            return res.status(500).end();
+        }
+        logger.info('results: ', results);
         return res.status(200).end();
-    });
+    }); 
 });
 
 router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
-    logger.info('POST on api/unfollow: ',req.user, ' ', req.body);
+    logger.info('POST on api/unfollow logged in User ',req.user.id, ' req.body.id: ', req.body.id);
 
-    function unFollowUser (fnc, user, followers) {
+    function stopFollowing (fnc, loggedInUser, userToStopFollowing) {
         User.findOneAndUpdate( 
-            { id: req.user.id },
-            { $pull: query},
+            { id: loggedInUser },
+            { $pull: { following: userToStopFollowing }},
+            { safe: true, upsert: true },
+            function (err, user) {
+                console.log(err);
+                return fnc(null, {user: user});
+            }
+        );   
+    }
+
+    function updateFollowersList (fnc, userToStopFollowing, loggedInUser) {
+        User.findOneAndUpdate( 
+            { id: userToStopFollowing },
+            { $pull: { followers: loggedInUser }},
             { safe: true, upsert: true },
             function (err, user) {
                 console.log(err);
@@ -364,41 +336,29 @@ router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
     }
 
     async.parallel({
+        setUnFollowing: function(cb) {
+            var loggedInUser = req.user.id;
+            var userToStopFollowing = req.body.id;
 
-
-        setFollowing: function(cb) {
-            User.findOneAndUpdate( 
-                { id: req.user.id },
-                { $pull: { following: req.body.id }},
-                { safe: true, upsert: true },
-                function (err, user) {
-                    console.log(err);
-                    return cb(null, {user: user});
-                }
-            );
-            
+            stopFollowing(cb, loggedInUser, userToStopFollowing);
         },
-        setFollowers: function(cb) {
-            User.findOneAndUpdate( 
-                { id: req.body.id },
-                { $pull: { followers: req.user.id }},
-                { safe: true, upsert: true },
-                function (err, user) {
-                    if (err) {
-                        logger.error(err);
-                    }
-                    console.log(err);
-                    return cb(null, {user: user});
-                }
-            );
-            logger.info('setFollowers()');
-            
+        setRemoveFollower: function(cb) {
+            var loggedInUser = req.user.id;
+            var userToStopFollowing = req.body.id;
+
+            updateFollowersList(cb, userToStopFollowing, loggedInUser);
         }
     }, 
     function (err, results) {
-        if(err) {return res.status(500).end();}
+        if(err) {
+            logger.info('error: ', err);
+            return res.status(500).end();
+        }
         return res.status(200).end();
     });
+
+
+    
 });
 
 router.get('/logout', function (req, res) {

@@ -48,6 +48,7 @@ userUtil.setIsFollowed = function (user, loggedInUser) {
 
     if (loggedInUser) {
         var userIsFollowing = loggedInUser.following.indexOf(user.id) !== -1 ? true : false;
+        logger.info('userIsFollowing: ', userIsFollowing);
         if (user === loggedInUser || userIsFollowing) {
             user.isFollowed = true;
         } else {
@@ -57,20 +58,8 @@ userUtil.setIsFollowed = function (user, loggedInUser) {
     return user;
 };
 
-
-// userUtil.removePassword = function (user, loggedInUser) {
-// logger.info('fn user-util removePassword user: ', user);
-//     var copy = {
-//         id: user.id,
-//         name: user.name,
-//         picture: '/assets/images/christian-strat.png'
-
-//     };
-//     return userUtil.setIsFollowed(copy, loggedInUser);
-// };
-
 userUtil.createClientUser = function (user, loggedInUser) {
-logger.info('fn user-util createClientUser user: ', user);
+logger.info('fn user-util createClientUser user: ', user.id);
     var copyUser = user || loggedInUser;
     if(copyUser) {
         var copy = {
