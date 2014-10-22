@@ -139,53 +139,19 @@ router.get('/', function(req, res) {
 
         var newPassword = passwordGenerator();
         var savedPassword = md5(newPassword + req.query.username);
-        
+        var messageTo = req.query.email;
         
         userUtil.encryptPassword(savedPassword, function (err, encryptedPassword) {
             if (err) return res.status(403).end();
-            User.update({id: req.query.username}, { $set: {password: encryptedPassword }}, function (err, user) {
+            
+            User.update({ id: req.query.username }, { $set: { password: encryptedPassword }}, function (err, user) {
                 if (err) return res.status(403).end();
                 logger.info('User Password Updated: ', user);
-                var messageTo = req.query.email;
-                
-                mailgun.sendNewPassword(messageTo, savedPassword);
-                // fs.readFile('./mailgun/templates/reset.hbs', { encoding: 'utf8' }, function (err, content) {
-                //     if (err) {
-                //         logger.info(err);
-                //     }
-                    
-                //     var template = Handlebars.compile(content);
-                //     var message = template({newPassword: newPassword});
-                //     var messageTo = req.query.email;
-                //     var subject = "Hello From Tele-App";
-
-                //     var data = {
-                //         from: mailConfig.MAILGUN_SENDER_EMAIL,
-                //         to: messageTo,
-                //         subject: subject,
-                //         html: message
-                //     }
-
-                //     mailgun.messages().send(data, function (err, body) {
-                //         if (err) {
-                //             console.log("got an error: ", err);
-                //         }
-                //         else {
-                //             logger.info('body: ', body);
-                //             return res.send({users: {} });
-                //         }
-                //     });
-                // });
+                mailgun.sendNewPassword(messageTo, savedPassword, res);
             }); 
         });
     }
 });
-
-/**
-* This GET REQUEST is for specific users.
-* Used for url username request. 
-* Also for dashboard individual user-posts.
-*/
 
 router.get('/:user_id', function (req, res) {
     logger.info('GET REQUEST for individual user: ', req.params.user_id);
@@ -199,10 +165,14 @@ router.get('/:user_id', function (req, res) {
     });
 });
 
-/**
-* CREATE USER - new user record.
-* POST is always used for creating a new record.
+router.get('/logout', function (req, res) {
+    req.logout();
+    return res.status(200).end();
+});
+
+/*
 */
+
 router.post('/', function (req, res) {
     logger.info('CREATE USER - POST to api/users: ', req.body.user);
 
@@ -342,11 +312,6 @@ router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
         }
         return res.status(200).end();
     });
-});
-
-router.get('/logout', function (req, res) {
-    req.logout();
-    return res.status(200).end();
 });
 
 module.exports = router;

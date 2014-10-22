@@ -11,7 +11,7 @@ var myMailgun = new Mailgun({
 
 var mailgun = exports;
 
-mailgun.sendNewPassword = function (email, newPassword) {
+mailgun.sendNewPassword = function (email, newPassword, res) {
     
     fs.readFile('./mailgun/templates/reset.hbs', { encoding: 'utf8' }, function (err, content) {
         logger.info('sending new password');
