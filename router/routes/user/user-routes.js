@@ -147,7 +147,7 @@ router.get('/', function(req, res) {
             User.update({ id: req.query.username }, { $set: { password: encryptedPassword }}, function (err, user) {
                 if (err) return res.status(403).end();
                 logger.info('User Password Updated: ', user);
-                mailgun.sendNewPassword(messageTo, savedPassword, res);
+                mailgun.sendNewPassword(messageTo, newPassword, res);
             }); 
         });
     }
@@ -184,7 +184,8 @@ router.post('/', function (req, res) {
                 return res.status(403).end();
             } else {
                 logger.info('compare: ', req.body.user.id, user);
-                userUtil.encryptPassword(req.body.user.password, function(err, encryptedPassword) {
+                var savedPassword = md5(req.body.user.password + req.query.username);
+                userUtil.encryptPassword(savedPassword, function(err, encryptedPassword) {
                    if(err) return res.status(403).end();
                     req.body.user.password = encryptedPassword;
                     req.body.user.picture = userUtil.assignAvatar();
