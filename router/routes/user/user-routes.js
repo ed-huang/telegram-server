@@ -111,14 +111,12 @@ router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
         setFollowing: function(cb) {
             var loggedInUser = req.user.id;
             var userToFollow = req.body.id;
-
             followUser(cb, loggedInUser, userToFollow);
 
         },
         setFollowers: function(cb) {
             var loggedInUser = req.user.id;
             var userBeingFollowed = req.body.id;
-            
             updateFollowersList(cb, userBeingFollowed, loggedInUser);
         }
     },
@@ -133,17 +131,19 @@ router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
     }); 
 });
 
-
-
 router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
     logger.info('POST on api/unfollow logged in User ',req.user.id, ' req.body.id: ', req.body.id);
-
+    
     function stopFollowing (fnc, loggedInUser, userToStopFollowing) {
         User.findOneAndUpdate( 
             { id: loggedInUser },
             { $pull: { following: userToStopFollowing }},
             { safe: true, upsert: true },
             function (err, user) {
+                if(err) {
+                    logger.error("Didn't not pull from Following");
+                    return fnc(err);
+                }
                 console.log(err);
                 return fnc(null, {user: user});
             }
@@ -156,6 +156,10 @@ router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
             { $pull: { followers: loggedInUser }},
             { safe: true, upsert: true },
             function (err, user) {
+                if (err) {
+                    logger.error("Did not pull from Followers");
+                    return fnc(err);
+                }
                 console.log(err);
                 return fnc(null, {user: user});
             }
@@ -166,13 +170,11 @@ router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
         setUnFollowing: function(cb) {
             var loggedInUser = req.user.id;
             var userToStopFollowing = req.body.id;
-
             stopFollowing(cb, loggedInUser, userToStopFollowing);
         },
         setRemoveFollower: function(cb) {
             var loggedInUser = req.user.id;
             var userToStopFollowing = req.body.id;
-
             updateFollowersList(cb, userToStopFollowing, loggedInUser);
         }
     }, 
@@ -241,8 +243,7 @@ function handleLoginRequest (req, res) {
     logger.info('req.query.operation = login - username: ', req.query.username);
 
     User.findOne({id: req.query.username}, function (err, user) {
-        var userQuery = req.query;
-        logger.info('user password: ', user.password, 'query: ', userQuery.password);
+        logger.info('user password: ', user.password, 'query: ', req.query.password);
 
         passport.authenticate('local', function(err, user, info) {
             logger.info("passport.authenticate() - user.id: ", user.id);
@@ -307,7 +308,10 @@ function followUser (fnc, loggedInUser, userToFollow) {
         //***** use addToset instead of push so you get unique posts in mongodb. 
         { safe: true, upsert: true },
         function (err, user) {
-            console.log(err);
+            if (err) {
+                logger.error("did not addToSet");
+                return fnc(err);
+            }
             return fnc(null, {user: user});
         }
     );
@@ -320,10 +324,16 @@ function updateFollowersList (fnc, userBeingFollowed, loggedInUser) {
         { $addToSet: { followers: loggedInUser }},
         { safe: true, upsert: true },
         function (err, user) {
+            if (err) {
+                logger.error("did not addToSet");
+                return fnc(err);
+            }
             console.log(err);
             return fnc(null, {user: user});
         }
     );
 }
+
+
 
 module.exports = router;

@@ -1,5 +1,6 @@
 var bcrypt = require('bcrypt');
 var logger = require('nlogger').logger(module);
+var avatars = require('../../../config').avatars;
 var userUtil  = exports;
 
 userUtil.setIsFollowed = function (user, loggedInUser) {
@@ -57,7 +58,6 @@ userUtil.encryptPassword = function (savedPassword, cb) {
 };
 
 userUtil.assignAvatar = function () {
-    var avatars = ['avatar-yellow.png', 'avatar-orange.png', 'avatar-blue.png', 'avatar-green.png', 'avatar-red.png'];
     var key = Math.floor(Math.random() * avatars.length);
     var image = '/assets/images/avatars/' + avatars[key];
     return image;

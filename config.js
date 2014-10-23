@@ -6,5 +6,7 @@ var mailgun = {
     MAILGUN_DOMAIN: 'sandboxe121af1225264126bd720fce94a29d5c.mailgun.org'
 }
 
-module.exports.mailgun = mailgun;
+var avatars = ['avatar-yellow.png', 'avatar-orange.png', 'avatar-blue.png', 'avatar-green.png', 'avatar-red.png'];
 
+module.exports.mailgun = mailgun;
+module.exports.avatars = avatars;
