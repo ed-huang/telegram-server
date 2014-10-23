@@ -11,7 +11,8 @@ passport.use(new LocalStrategy(
         
         User.findOne({id: username}, function (err, user) {
             if (err) { 
-                logger.info('findOne returned error in local passport');
+                logger.info('FindOne returned error in local passport');
+                logger.error(err);
                 return done(err); 
             }
             if (!user) { 

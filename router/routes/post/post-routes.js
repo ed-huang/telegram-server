@@ -56,9 +56,11 @@ router.get('/', function (req, res) {
         var emberPosts = [];
         var query = { author: req.query.author };
 
-        var author = userUtil.setClientUser(req.query.author, req.user);
         Post.find(query, function (err, posts) {
-            if (err) return res.status(403).end();
+            if (err) {
+                logger.error('Error in index, Looking for post.');
+                return res.status(403).end();
+            }
             posts.forEach(function (post) {
                 var emberPost = {
                     id: post._id,
@@ -78,9 +80,7 @@ router.get('/', function (req, res) {
 /**
 * Creating a post. Most Likely from the dashboard.
 */
-router.post('/', ensureAuthenticated, function (req, res) {
-    logger.info('posts request err??');
-
+router.post('/', userUtil.ensureAuthenticated, function (req, res) {
     if (req.user.id === req.body.post.author) {
         logger.info('user.id same as post author');
 
@@ -112,22 +112,12 @@ router.post('/', ensureAuthenticated, function (req, res) {
     }
 });
 
-router.delete('/:post_id', ensureAuthenticated, function (req, res) {
+router.delete('/:post_id', userUtil.ensureAuthenticated, function (req, res) {
     logger.info('DELETE POST: ', req.params.post_id);
     Post.remove({ _id: req.params.post_id }, function (err) {
         if (err) {return res.status(404).end();}
         return res.send({});
     });
 });
-
-function ensureAuthenticated (req, res, next) {
-    logger.info('ensureAuthticated: ', req.isAuthenticated());
-    if (req.isAuthenticated()) {
-        logger.info('isAuthenticated');
-        return next();
-    } else {
-        return res.status(403);
-    }
-}
 
 module.exports = router;
