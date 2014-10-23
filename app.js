@@ -1,21 +1,15 @@
-var express = require('express');
-var session = require('express-session');
-var cookieParser = require('cookie-parser');
-var bodyParser = require('body-parser');
-var passport = require('./passport/passport-aunthenticate');
+var middle = require('./express_config');
 var db = require('./database/database');
 
-var app = express();
+var app = middle.express();
 
-    app.use(cookieParser());
-    app.use(bodyParser.urlencoded({ extended: false })); // parse application/json // used for POST and parsed request.body
-    app.use(bodyParser.json()); // parse application/vnd.api+json as json
-    app.use(bodyParser.json({ type: 'application/vnd.api+json' }));
-    //secret is used to encrypt cookies USE SOMETHING MORE RANDOM AND HARD
-    //connection.cid unique to each user
-    app.use(session({ secret: 'keyboard cat', resave: true, saveUninitialized: true, rolling: true }));
-    app.use(passport.initialize());
-    app.use(passport.session());
+app.use(middle.cookieParser());
+app.use(middle.bodyParser.urlencoded({ extended: false }));
+app.use(middle.bodyParser.json()); 
+app.use(middle.bodyParser.json({ type: 'application/vnd.api+json' }));
+app.use(middle.session({ secret: 'keyboard cat', resave: true, saveUninitialized: true, rolling: true }));
+app.use(middle.passport.initialize());
+app.use(middle.passport.session());
 
 var router = require('./router')(app);
 
