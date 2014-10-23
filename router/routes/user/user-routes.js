@@ -147,7 +147,13 @@ router.get('/', function(req, res) {
             User.update({ id: req.query.username }, { $set: { password: encryptedPassword }}, function (err, user) {
                 if (err) return res.status(403).end();
                 logger.info('User Password Updated: ', user);
-                mailgun.sendNewPassword(messageTo, newPassword, res);
+                
+                mailgun.sendNewPassword(messageTo, newPassword, function (err) {
+                    if (err) {
+                        return res.status(500).end();
+                    }
+                    return res.send({users: {}});
+                });
             }); 
         });
     }

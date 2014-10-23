@@ -11,9 +11,10 @@ var myMailgun = new Mailgun({
 
 var mailgun = exports;
 
-mailgun.sendNewPassword = function (email, newPassword, res) {
+mailgun.sendNewPassword = function (email, newPassword, done) {
     
     fs.readFile('./mailgun/templates/reset.hbs', { encoding: 'utf8' }, function (err, content) {
+        if (err) { throw err; }
         logger.info('sending new password');
         var template = Handlebars.compile(content);
         var message = template({newPassword: newPassword});
@@ -32,10 +33,11 @@ mailgun.sendNewPassword = function (email, newPassword, res) {
         myMailgun.messages().send(data, function (err, body) {
             if (err) {
                 logger.error("Something wrong with mailgun send: ", err);
+                return done(err);
             }
             else {
                 logger.info('body: ', body);
-                return res.send({users: {} });
+                return done();
             }
         });
     });
