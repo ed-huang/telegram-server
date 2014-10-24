@@ -4,6 +4,7 @@ var User = db.model('User');
 var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
 var bcrypt = require('bcrypt');
+var userUtil = require('../router/routes/user/user-util');
 
 passport.use(new LocalStrategy(
     function (username, password, done) {
@@ -21,13 +22,16 @@ passport.use(new LocalStrategy(
             }
 
             bcrypt.compare(password, user.password, function(err, res) {
+                if (err) {
+                    logger.error('Bcrypt password compare error: ', err);
+                }
                 if(res) {
-                    logger.info('Bcrypt passed');
+                    logger.info('Bcrypt passed: ', res);
                     logger.info('local returning user: ', user.id);
                     return done(null, user);
                 } else {
-                    logger.info('Bcrypt failed: ', 'query: ',password, ' user: ', user.password);
-                    logger.warn('Password is incorrect.');
+                    logger.warn('Bcrypt failed: ', 'query: ',password);
+                    logger.warn( ' user.password: ', user.password);
                     return done(null, false, { message: 'Incorrect password.' } );
                 }
             });
@@ -36,11 +40,12 @@ passport.use(new LocalStrategy(
 );
 
 passport.serializeUser(function(user, done) {
-    logger.info('serialUser() - user: ', user);
+    logger.info('Serialized user: ', user.id);
     done(null, user.id);
 });
 
 passport.deserializeUser(function(id, done) {
+    logger.info('Deserialized user: ', id);
     User.findOne({id: id}, function (err, user) {
         done(err, user);
     });

@@ -12,66 +12,13 @@ var userUtil = require('../user/user-util');
 */
 
 router.get('/', function (req, res) {
-    logger.info('GET on /api/posts');
-    
+    logger.info('GET on /api/posts'); 
     if (req.query.operation === 'dashboard') {
         logger.info('GET posts for dashboard');
-        var users = [];
-        var query = {};
-        var emberPosts = [];
-        
-        if (req.user) {
-            var searchArray = req.user.following.slice(0);
-            searchArray.push(req.user.id);
-            query = { author: { $in: searchArray }};
-            logger.info('this is query: ', query);
-
-            Post.find(query, function (err, posts) {
-                if (err) return res.status(403).end();
-                posts.forEach(function (post) {
-                    var emberPost = {
-                        id: post._id,
-                        author: post.author, 
-                        text: post.text,
-                        timestamp: post.timestamp
-                    }
-                    emberPosts.push(emberPost);
-                    users.push(post.author);
-                });
-
-                User.find({ id: { $in: users }}, function (err, users) {
-                    if (err) return res.status(403).end();
-                    var copyUsers = [];
-                    users.forEach(function (user) {
-                        var u = userUtil.setClientUser(user, req.user);
-                        copyUsers.push(u);
-                    });
-                    return res.send({ posts: emberPosts, users: copyUsers } );
-                });
-            });
-        }
-        
+        getPostsForDashBoard(req, res);
     } else if (req.query.operation === 'index') {
         logger.info('GET posts for user/index route');
-        var emberPosts = [];
-        var query = { author: req.query.author };
-
-        Post.find(query, function (err, posts) {
-            if (err) {
-                logger.error('Error in index, Looking for post.');
-                return res.status(403).end();
-            }
-            posts.forEach(function (post) {
-                var emberPost = {
-                    id: post._id,
-                    author: post.author, 
-                    text: post.text,
-                    timestamp: post.timestamp
-                }
-                emberPosts.push(emberPost);
-            });
-            return res.send({ posts: emberPosts } );
-        });
+        getPostsForUserIndex(req, res);
     } else {
         return res.status(500).end();
     }
@@ -119,5 +66,63 @@ router.delete('/:post_id', userUtil.ensureAuthenticated, function (req, res) {
         return res.send({});
     });
 });
+
+function getPostsForDashBoard(req, res) {
+    var users = [];
+    var query = {};
+    var emberPosts = [];
+    
+    if (req.user) {
+        var searchArray = req.user.following.slice(0);
+        searchArray.push(req.user.id);
+        query = { author: { $in: searchArray }};
+        logger.info('this is query: ', query);
+
+        Post.find(query, function (err, posts) {
+            if (err) return res.status(403).end();
+            posts.forEach(function (post) {
+                var emberPost = {
+                    id: post._id,
+                    author: post.author, 
+                    text: post.text,
+                    timestamp: post.timestamp
+                }
+                emberPosts.push(emberPost);
+                users.push(post.author);
+            });
+
+            User.find({ id: { $in: users }}, function (err, users) {
+                if (err) return res.status(403).end();
+                var copyUsers = [];
+                users.forEach(function (user) {
+                    var u = userUtil.createClientUser(user, req.user);
+                    copyUsers.push(u);
+                });
+                return res.send({ posts: emberPosts, users: copyUsers } );
+            });
+        });
+    }
+}
+
+function getPostsForUserIndex(req, res) {
+    var emberPosts = [];
+    var query = { author: req.query.author };
+    Post.find(query, function (err, posts) {
+        if (err) {
+            logger.error('Error in index, Looking for post.');
+            return res.status(403).end();
+        }
+        posts.forEach(function (post) {
+            var emberPost = {
+                id: post._id,
+                author: post.author, 
+                text: post.text,
+                timestamp: post.timestamp
+            }
+            emberPosts.push(emberPost);
+        });
+        return res.send({ posts: emberPosts } );
+    });
+}
 
 module.exports = router;

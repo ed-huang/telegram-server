@@ -37,7 +37,7 @@ mailgun.sendNewPassword = function (email, newPassword, done) {
             }
             else {
                 logger.info('body: ', body);
-                return done();
+                return done(null);
             }
         });
     });

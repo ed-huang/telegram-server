@@ -39,6 +39,10 @@ router.get('/', function(req, res) {
     default:
         logger.info('find all users');
         User.find({}, function (err, users) {
+            if (err) {
+                logger.error('Unable to find user: ', err);    
+            }
+            
             return res.send({ users: users } );    
         });
         break;
@@ -49,9 +53,13 @@ router.get('/:user_id', function (req, res) {
     logger.info('GET REQUEST for individual user: ', req.params.user_id);
 
     User.findOne({ 'id': req.params.user_id }, function (err, user) {
-        if (err) { return res.status(500).end() };
+        if (err) {
+            logger.error('Unable to find user: ', err);
+            return res.status(500).end();
+        }
+            
         if(!user) { return res.status(404).end() };
-        return res.send({ 'user': userUtil.setClientUser(user) });
+        return res.send({ 'user': userUtil.createClientUser(user, null) });
     });
 });
 
@@ -66,26 +74,40 @@ router.post('/', function (req, res) {
     if (req.body.user) {
 
         User.findOne({ id: req.body.user.id }, function (err, user) {
+            if (err) {
+                logger.error('Unable to findOne: ', err);
+            }
             if (user) {
-                logger.debug('user already in db: ', userUtil.setClientUser(req.body.user));
+                logger.debug('user already in db: ', req.body.user.id);
                 return res.status(403).end();
             } else {
-                logger.info('compare: ', req.body.user.id, user);
+                logger.info('User not found: ', req.body.user.id);
                 var password = req.body.user.password;
                 
                 userUtil.encryptPassword(password, function(err, encryptedPassword) {
-                   if(err) return res.status(403).end();
+                   if (err) {
+                        logger.error('Password wrong: ', password);
+                        logger.error('Unable to encrypt: ', err);
+                        return res.status(403).end();
+                   } 
                     
                     req.body.user.password = encryptedPassword;
                     req.body.user.picture = userUtil.assignAvatar();
                     
                     User.create(req.body.user, function (err, user) {
-                        if (err) return res.status(403).end();
+                        if (err) {
+                            logger.error('User not Created', err);
+                            return res.status(403).end();
+                        }
                         logger.info('User Created: ', user);
-                        req.login(req.body.user, function(err) {
-                            logger.info('req.login');
-                            if (err) { return res.status(500).end(); }
-                            var u = userUtil.setClientUser(user);
+                        req.login(user, function(err) {
+                            if (err) {
+                                logger.error('Unable to login', err);
+                                logger.error('User: ', req.body.user);
+                                return res.status(500).end(); 
+                            }
+                            logger.info('successfully logged in');
+                            var u = userUtil.createClientUser(user, req.user);
                             return res.send({user: u});
                         });
                     }); 
@@ -100,8 +122,6 @@ router.post('/', function (req, res) {
 
 router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
     logger.info('POST on api/follow: ',req.user.id, ' ', req.body.id);
-
-    
 
     async.parallel({ 
         loggedInUser: function(cb) {
@@ -241,7 +261,7 @@ function handleFollowersRequest (req, res) {
             if (err) return res.status(403).end();
 
             followers.forEach(function (follower) {
-                var u = userUtil.setClientUser(follower, req.user);
+                var u = userUtil.createClientUser(follower, req.user);
                 // u = userUtil.setIsFollowed(u, req.user);
                 emberArray.push(u);
             });
@@ -262,7 +282,7 @@ function handleFollowingRequest (req, res) {
             if (err) return res.status(403).end();
 
             following.forEach(function (follower) {
-                var u = userUtil.setClientUser(follower, req.user);
+                var u = userUtil.createClientUser(follower, req.user);
                 emberArray.push(u);
             });
 
@@ -272,32 +292,37 @@ function handleFollowingRequest (req, res) {
 }
 
 function handleLoginRequest (req, res) {
-    logger.info('req.query.operation = login - username: ', req.query.username);
+    logger.info('Handle Login: ', req.query.username);
 
     User.findOne({id: req.query.username}, function (err, user) {
-        logger.info('user password: ', user.password, 'query: ', req.query.password);
+        if (err) {
+            logger.error('Login error, unable to findOne: ', err);
+            return res.status(404).end();
+        }
+
+        logger.info('req.query.password: ', req.query.password);
+        logger.info('user: ', user.id);
 
         passport.authenticate('local', function(err, user, info) {
-            logger.info("passport.authenticate() - user.id: ", user.id);
-
-            if (err) { 
-                logger.error('Passport authenticate error in authenticating');
+            if (err) {
+                logger.error('Passport authenticate error in authenticating', err);
                 return res.status(500).end(); 
             }
-            
             if (!user) { 
+                logger.error('Password authenticate not a user: ', info);
                 return res.status(404).end(); 
+            } else {
+                logger.info("Passport authenticate - user.id: ", user.id);
+                req.logIn(user, function(err) {
+                    if (err) { 
+                        logger.info('if err in req.login() user.id: ', user);
+                        logger.error('Something wrong with res.login()', err);
+                        return res.status(500).end(); 
+                    }
+                    return res.send({ users: [ userUtil.createClientUser(user, req.user) ]} );
+                });
             }
-
-            req.logIn(user, function(err) {
-                if (err) { 
-                    logger.info('if err in req.login() user.id: ', user);
-                    logger.error('Something wrong with res.login()', err);
-                    return res.status(500).end(); 
-                }
-
-                return res.send({ users: [ userUtil.setClientUser(user, req.user) ]} );
-            });
+            
         })(req, res);
     });
 }
@@ -314,18 +339,25 @@ function handleResetRequest(req, res) {
     var newPassword = passwordGenerator();
     var savedPassword = md5(newPassword + req.query.username);
     var messageTo = req.query.email;
-    
+    logger.info('Salt used: ', req.query.username);
     userUtil.encryptPassword(savedPassword, function (err, encryptedPassword) {
-        if (err) return res.status(403).end();
+        if (err) {
+            logger.error('Something wrong with userUtil.encryptedPassword');
+            return res.status(403).end();
+        }
         
         User.update({ id: req.query.username }, { $set: { password: encryptedPassword }}, function (err, user) {
-            if (err) return res.status(403).end();
+            if (err) {
+                logger.error('Unable to update user: ', err);
+                return res.status(403).end();
+            }
             logger.info('User Password Updated: ', user);
-
             mailgun.sendNewPassword(messageTo, newPassword, function (err) {
                 if (err) {
+                    logger.error('Did not send message: ', err);
                     return res.status(500).end();
                 }
+                logger.info('Sent new password.');
                 return res.send({users: {}});
             });
         }); 

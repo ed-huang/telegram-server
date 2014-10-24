@@ -8,7 +8,7 @@ userUtil.setIsFollowed = function (user, loggedInUser) {
 
     if (loggedInUser) {
         var userIsFollowing = loggedInUser.following.indexOf(user.id) !== -1 ? true : false;
-        logger.info('userIsFollowing: ', userIsFollowing);
+        logger.info('User: '+user.id+' is being followed: ', userIsFollowing);
         if (user === loggedInUser || userIsFollowing) {
             user.isFollowed = true;
         } else {
@@ -18,19 +18,20 @@ userUtil.setIsFollowed = function (user, loggedInUser) {
     return user;
 };
 
-userUtil.setClientUser = function (user, loggedInUser) {
-    logger.info('fn user-util setClientUser user: ', user.id);
-    
-    var copyUser = user || loggedInUser;
-    if(copyUser) {
-        var copy = {
-            id: copyUser.id,
-            name: copyUser.name,
-            picture: copyUser.picture
-        };
+userUtil.createClientUser = function (user, loggedInUser) {
+    logger.info('Creating Client User: ', user.id);
+
+    var copy = {
+        id: user.id,
+        name: user.name,
+        picture: user.picture
+    }; 
+    if (loggedInUser) {
+        return userUtil.setIsFollowed(copy, loggedInUser);
+    } else {
+        return copy;
     }
     
-    return userUtil.setIsFollowed(copy, loggedInUser);
 };
 
 userUtil.ensureAuthenticated = function (req, res, next) {
@@ -48,10 +49,16 @@ userUtil.encryptPassword = function (savedPassword, cb) {
     logger.info('encryptPassword: ', savedPassword);
     
     bcrypt.genSalt(10, function(err, salt) {
+        if (err) {
+            logger.error('genSalt: ', err);
+        }
         logger.info('bcrypt: ', salt);
         bcrypt.hash(savedPassword, salt, function(err, hash) {
-            logger.info('savedPassword: ', hash);
-            if(err) return res.status(403).end();
+            if (err) {
+                logger.error('Hash Problem: ', err);
+                return res.status(403).end();
+            }
+            logger.info('Hashed Password: ', hash);
             return cb(err, hash);
         });
     });
