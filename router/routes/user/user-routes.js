@@ -18,30 +18,30 @@ router.get('/', function(req, res) {
     var operation = req.query.operation;
     
     switch (operation) {
-        case 'authenticating':
-            handleAuthenticatingRequest(req, res);
-            break;
-        case 'followers':
-            handleFollowersRequest(req, res);
-            break;
-        case 'following':
-            handleFollowingRequest(req, res);
-            break;
-        case 'login':
-            handleLoginRequest(req, res);
-            break;
-        case 'logout':
-            handleLogoutRequest(req, res);
-            break;
-        case 'reset':
-            handleResetRequest(req, res);
-            break;
-        default:
-            logger.info('find all users');
-            User.find({}, function (err, users) {
-                return res.send({ users: users } );    
-            });
-            break;
+    case 'authenticating':
+        handleAuthenticatingRequest(req, res);
+        break;
+    case 'followers':
+        handleFollowersRequest(req, res);
+        break;
+    case 'following':
+        handleFollowingRequest(req, res);
+        break;
+    case 'login':
+        handleLoginRequest(req, res);
+        break;
+    case 'logout':
+        handleLogoutRequest(req, res);
+        break;
+    case 'reset':
+        handleResetRequest(req, res);
+        break;
+    default:
+        logger.info('find all users');
+        User.find({}, function (err, users) {
+            return res.send({ users: users } );    
+        });
+        break;
     }
 });
 
@@ -49,8 +49,6 @@ router.get('/:user_id', function (req, res) {
     logger.info('GET REQUEST for individual user: ', req.params.user_id);
 
     User.findOne({ 'id': req.params.user_id }, function (err, user) {
-        //if user is not found will return null. 
-
         if (err) { return res.status(500).end() };
         if(!user) { return res.status(404).end() };
         return res.send({ 'user': userUtil.setClientUser(user) });
@@ -61,9 +59,6 @@ router.get('/logout', function (req, res) {
     req.logout();
     return res.status(200).end();
 });
-
-/*
-*/
 
 router.post('/', function (req, res) {
     logger.info('CREATE USER - POST to api/users: ', req.body.user);
@@ -103,21 +98,49 @@ router.post('/', function (req, res) {
     }
 });
 
-//api/user/follow
 router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
-    logger.info('POST on api/follow: ',req.user, ' ', req.body);
+    logger.info('POST on api/follow: ',req.user.id, ' ', req.body.id);
+
     
+
     async.parallel({ 
-        setFollowing: function(cb) {
+        loggedInUser: function(cb) {
             var loggedInUser = req.user.id;
             var userToFollow = req.body.id;
-            followUser(cb, loggedInUser, userToFollow);
-
+            startFollowing(loggedInUser, userToFollow, cb);
         },
-        setFollowers: function(cb) {
+
+        currentUserToFollow: function(cb) {
             var loggedInUser = req.user.id;
             var userBeingFollowed = req.body.id;
-            updateFollowersList(cb, userBeingFollowed, loggedInUser);
+            addFollowers(userBeingFollowed, loggedInUser, cb);
+        }
+    },
+
+    function (err, results) {
+        if(err) {
+            logger.info('error: ', err);
+            res.status(500).end();
+        }
+        logger.info('results: ', results);
+        res.status(200).send(results);
+    }); 
+});
+
+router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
+    logger.info('POST on api/unfollow logged in User ',req.user.id, ' req.body.id: ', req.body.id);
+    
+    async.parallel({
+        loggedInUser: function(cb) {
+            var loggedInUser = req.user.id;
+            var userToStopFollowing = req.body.id;
+            stopFollowing(loggedInUser, userToStopFollowing, cb);
+        },
+
+        stopFollowingCurrentUser: function(cb) {
+            var loggedInUser = req.user.id;
+            var userToStopFollowing = req.body.id;
+            removeFollowers(userToStopFollowing, loggedInUser, cb);
         }
     },
 
@@ -127,65 +150,74 @@ router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
             return res.status(500).end();
         }
         logger.info('results: ', results);
-        return res.status(200).end();
-    }); 
-});
-
-router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
-    logger.info('POST on api/unfollow logged in User ',req.user.id, ' req.body.id: ', req.body.id);
-    
-    function stopFollowing (fnc, loggedInUser, userToStopFollowing) {
-        User.findOneAndUpdate( 
-            { id: loggedInUser },
-            { $pull: { following: userToStopFollowing }},
-            { safe: true, upsert: true },
-            function (err, user) {
-                if(err) {
-                    logger.error("Didn't not pull from Following");
-                    return fnc(err);
-                }
-                console.log(err);
-                return fnc(null, {user: user});
-            }
-        );   
-    }
-
-    function updateFollowersList (fnc, userToStopFollowing, loggedInUser) {
-        User.findOneAndUpdate( 
-            { id: userToStopFollowing },
-            { $pull: { followers: loggedInUser }},
-            { safe: true, upsert: true },
-            function (err, user) {
-                if (err) {
-                    logger.error("Did not pull from Followers");
-                    return fnc(err);
-                }
-                console.log(err);
-                return fnc(null, {user: user});
-            }
-        );   
-    }
-
-    async.parallel({
-        setUnFollowing: function(cb) {
-            var loggedInUser = req.user.id;
-            var userToStopFollowing = req.body.id;
-            stopFollowing(cb, loggedInUser, userToStopFollowing);
-        },
-        setRemoveFollower: function(cb) {
-            var loggedInUser = req.user.id;
-            var userToStopFollowing = req.body.id;
-            updateFollowersList(cb, userToStopFollowing, loggedInUser);
-        }
-    }, 
-    function (err, results) {
-        if(err) {
-            logger.info('error: ', err);
-            return res.status(500).end();
-        }
-        return res.status(200).end();
+        res.status(200).send(results);
     });
 });
+
+/*
+** FUNCTION DEFINITIONS
+*/
+
+function addFollowers(userBeingFollowed, loggedInUser, cb) {
+    User.findOneAndUpdate( 
+        { id: userBeingFollowed },
+        { $addToSet: { followers: loggedInUser }},
+        { safe: true, upsert: true },
+        function (err, user) {
+            if (err) {
+                logger.error("did not addToSet");
+                return fnc(err);
+            }
+            cb(null, user.id);
+        }
+    );
+}
+
+function startFollowing(loggedInUser, userToFollow, cb) {
+    User.findOneAndUpdate( 
+        { id: loggedInUser },
+        { $addToSet: { following: userToFollow }},
+        //***** use addToset instead of push so you get unique posts in mongodb. 
+        { safe: true, upsert: true },
+        function (err, user) {
+            if (err) {
+                logger.error("did not addToSet");
+                return fnc(err);
+            }
+            cb(null, user.id);
+        }
+    );
+}
+
+function removeFollowers(userToStopFollowing, loggedInUser, cb) {
+    User.findOneAndUpdate( 
+        { id: userToStopFollowing },
+        { $pull: { followers: loggedInUser }},
+        { safe: true, upsert: true },
+        function (err, user) {
+            if (err) {
+                logger.error("Did not pull from Followers");
+                return fnc(err);
+            }
+            cb(null, user.id);
+        }
+    );
+}
+
+function stopFollowing(loggedInUser, userToStopFollowing, cb) {
+    User.findOneAndUpdate( 
+        { id: loggedInUser },
+        { $pull: { following: userToStopFollowing }},
+        { safe: true, upsert: true },
+        function (err, user) {
+            if(err) {
+                logger.error("Didn't not pull from Following");
+                return fnc(err);
+            }
+            cb(null, user.id);
+        }
+    ); 
+}
 
 function handleAuthenticatingRequest (req, res) {
     logger.info('isAuthenticated: ', req.isAuthenticated());
@@ -299,41 +331,5 @@ function handleResetRequest(req, res) {
         }); 
     });
 }
-
-function followUser (fnc, loggedInUser, userToFollow) {
-    logger.info('setFollowing()');
-    User.findOneAndUpdate( 
-        { id: loggedInUser },
-        { $addToSet: { following: userToFollow }},
-        //***** use addToset instead of push so you get unique posts in mongodb. 
-        { safe: true, upsert: true },
-        function (err, user) {
-            if (err) {
-                logger.error("did not addToSet");
-                return fnc(err);
-            }
-            return fnc(null, {user: user});
-        }
-    );
-}
-
-function updateFollowersList (fnc, userBeingFollowed, loggedInUser) {
-    logger.info('setFollowers()');
-    User.findOneAndUpdate( 
-        { id: userBeingFollowed },
-        { $addToSet: { followers: loggedInUser }},
-        { safe: true, upsert: true },
-        function (err, user) {
-            if (err) {
-                logger.error("did not addToSet");
-                return fnc(err);
-            }
-            console.log(err);
-            return fnc(null, {user: user});
-        }
-    );
-}
-
-
 
 module.exports = router;
