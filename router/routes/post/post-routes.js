@@ -1,10 +1,11 @@
-var logger = require('nlogger').logger(module);
-var express = require('express');
-var router = express.Router();
 var db = require('../../../database/database');
+var logger = require('nlogger').logger(module);
+var router = require('express').Router();
+var userUtil = require('../user/user-util');
+
 var Post = db.model('Post');
 var User = db.model('User');
-var userUtil = require('../user/user-util');
+
 
 /**
 * Requesting posts from the Posts Stream 
@@ -28,6 +29,7 @@ router.get('/', function (req, res) {
 * Creating a post. Most Likely from the dashboard.
 */
 router.post('/', userUtil.ensureAuthenticated, function (req, res) {
+    logger.info('Create post'); 
     if (req.user.id === req.body.post.author) {
         logger.info('user.id same as post author');
 
@@ -60,9 +62,13 @@ router.post('/', userUtil.ensureAuthenticated, function (req, res) {
 });
 
 router.delete('/:post_id', userUtil.ensureAuthenticated, function (req, res) {
-    logger.info('DELETE POST: ', req.params.post_id);
+    logger.info('Post delete route.');
     Post.remove({ _id: req.params.post_id }, function (err) {
-        if (err) {return res.status(404).end();}
+        if (err) {
+            logger.error('Post Remove error: ', err);
+            return res.status(404).end();
+        }
+        logger.info('DELETE POST: ', req.params);
         return res.send({});
     });
 });

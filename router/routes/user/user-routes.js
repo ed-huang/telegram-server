@@ -1,20 +1,18 @@
 var async = require('async');
 var db = require('../../../database/database.js');
-var express = require('express');
 var fs = require('fs');
-var Handlebars = require('handlebars');
 var logger = require('nlogger').logger(module);
 var mailgun = require('../../../mailgun/mailgun-mailserver');
-var mailConfig = require('../../../config').mailgun;
 var md5 = require('MD5');
 var passport = require('../../../passport/passport-authenticate');
 var passwordGenerator = require('password-generator');
-var router = express.Router();
-var User = db.model('User');
+var router = require('express').Router();
 var userUtil = require('./user-util');
 
+var User = db.model('User');
+
 router.get('/', function(req, res) {
-    logger.info('GET /users/');
+    logger.info('GET users route index');
     var operation = req.query.operation;
     
     switch (operation) {
@@ -69,48 +67,58 @@ router.get('/logout', function (req, res) {
 });
 
 router.post('/', function (req, res) {
-    logger.info('CREATE USER - POST to api/users: ', req.body.user);
-
+    logger.info('CREATE USER - POST to api/users: ', req.body.id);
     if (req.body.user) {
 
         User.findOne({ id: req.body.user.id }, function (err, user) {
-            if (err) {
-                logger.error('Unable to findOne: ', err);
-            }
+            if (err) logger.error('Unable to findOne: ', err);
             if (user) {
-                logger.debug('user already in db: ', req.body.user.id);
+                logger.warn('user already in db: ', req.body.user.id);
                 return res.status(403).end();
             } else {
                 logger.info('User not found: ', req.body.user.id);
                 var password = req.body.user.password;
-                
-                userUtil.encryptPassword(password, function(err, encryptedPassword) {
-                   if (err) {
-                        logger.error('Password wrong: ', password);
-                        logger.error('Unable to encrypt: ', err);
-                        return res.status(403).end();
-                   } 
-                    
-                    req.body.user.password = encryptedPassword;
-                    req.body.user.picture = userUtil.assignAvatar();
-                    
-                    User.create(req.body.user, function (err, user) {
-                        if (err) {
-                            logger.error('User not Created', err);
-                            return res.status(403).end();
-                        }
-                        logger.info('User Created: ', user);
-                        req.login(user, function(err) {
+                async.waterfall([
+                    function (cb) {
+                        userUtil.encryptPassword(password, function(err, encryptedPassword) {
                             if (err) {
-                                logger.error('Unable to login', err);
-                                logger.error('User: ', req.body.user);
-                                return res.status(500).end(); 
-                            }
-                            logger.info('successfully logged in');
-                            var u = userUtil.createClientUser(user, req.user);
-                            return res.send({user: u});
+                                logger.error('Password wrong: ', password);
+                                logger.error('Unable to encrypt: ', err);
+                                cb(403);
+                            } 
+                            req.body.user.password = encryptedPassword;
+                            req.body.user.picture = userUtil.assignAvatar();
+
+                            cb(null, req.body.user);
                         });
-                    }); 
+                    },
+                    function (user, cb) {
+                        User.create(user, function (err, user) {
+                            if (err) {
+                                logger.error('User not Created', err);
+                                cb(403);
+                            }
+                            logger.info('User Created: ', user.id);
+                            req.login(user, function(err) {
+                                if (err) {
+                                    logger.error('Unable to login', err);
+                                    logger.error('User: ', req.body.user);
+                                    cb(500); 
+                                }
+                                logger.info('successfully logged in');
+                                var newUser = userUtil.createClientUser(user, req.user);
+                                cb(null, newUser);
+                                
+                            });
+                        });
+                    }
+                ], 
+                function (err, newUser) {
+                    if (err) {
+                        logger.error('Waterfall fail.', err);
+                        return res.status(err).end();
+                    }
+                    return res.send({user: newUser});
                 });
             }
         });
@@ -121,7 +129,7 @@ router.post('/', function (req, res) {
 });
 
 router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
-    logger.info('POST on api/follow: ',req.user.id, ' ', req.body.id);
+    logger.info('ROUTE - Make user ',req.user.id, ' follow user ', req.body.id);
 
     async.parallel({ 
         loggedInUser: function(cb) {
@@ -148,7 +156,7 @@ router.post('/follow', userUtil.ensureAuthenticated, function (req, res) {
 });
 
 router.post('/unfollow', userUtil.ensureAuthenticated, function (req, res) {
-    logger.info('POST on api/unfollow logged in User ',req.user.id, ' req.body.id: ', req.body.id);
+    logger.info('ROUTE Post Unfollow - logged in User ',req.user.id, ' req.body.id: ', req.body.id);
     
     async.parallel({
         loggedInUser: function(cb) {
@@ -272,7 +280,7 @@ function handleFollowersRequest (req, res) {
 }
 
 function handleFollowingRequest (req, res) {
-    logger.info('GET /users/ req.query.operation = following - req.query.curUser: ', req.query.curUser);
+    logger.info('GET users following current user: ', req.query.curUser);
     
     var emberArray = [];
     User.findOne({ id: req.query.curUser }, function (err, curUser) {
@@ -297,33 +305,34 @@ function handleLoginRequest (req, res) {
     User.findOne({id: req.query.username}, function (err, user) {
         if (err) {
             logger.error('Login error, unable to findOne: ', err);
-            return res.status(404).end();
+            return res.status(500).end();
         }
 
-        logger.info('req.query.password: ', req.query.password);
-        logger.info('user: ', user.id);
-
-        passport.authenticate('local', function(err, user, info) {
-            if (err) {
-                logger.error('Passport authenticate error in authenticating', err);
-                return res.status(500).end(); 
-            }
-            if (!user) { 
-                logger.error('Password authenticate not a user: ', info);
-                return res.status(404).end(); 
-            } else {
-                logger.info("Passport authenticate - user.id: ", user.id);
-                req.logIn(user, function(err) {
-                    if (err) { 
-                        logger.info('if err in req.login() user.id: ', user);
-                        logger.error('Something wrong with res.login()', err);
-                        return res.status(500).end(); 
-                    }
-                    return res.send({ users: [ userUtil.createClientUser(user, req.user) ]} );
-                });
-            }
-            
-        })(req, res);
+        if (user) {
+            logger.info('Login user found.', user.id);
+            passport.authenticate('local', function(err, user, info) {
+                if (err) {
+                    logger.error('Passport authenticate error in authenticating', err);
+                    return res.status(500).end(); 
+                } else {
+                    logger.info("Passport authenticate - user.id: ", user.id);
+                    req.logIn(user, function(err) {
+                        if (err) { 
+                            logger.error('Something wrong with res.login()', err);
+                            logger.error('Strategy callback: ', info);
+                            return res.status(500).end(); 
+                        }
+                        logger.info('LogIn Successful: ', user.id);
+                        return res.send({ users: [ userUtil.createClientUser(user, req.user) ]} );
+                    });
+                }
+                
+            })(req, res);    
+        } else {
+            logger.warn('Login error. User not found.');
+            return res.status(403).end();
+        }
+        
     });
 }
 

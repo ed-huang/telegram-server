@@ -1,21 +1,25 @@
+var avatars = require('../../../config').avatars;
 var bcrypt = require('bcrypt');
 var logger = require('nlogger').logger(module);
-var avatars = require('../../../config').avatars;
 var userUtil  = exports;
 
 userUtil.setIsFollowed = function (user, loggedInUser) {
-    logger.info('setIsFollowed: ', user);
+    logger.info('setIsFollowed: ', user.id);
+    logger.info('loggedInUser: ', loggedInUser.id);
 
     if (loggedInUser) {
-        var userIsFollowing = loggedInUser.following.indexOf(user.id) !== -1 ? true : false;
-        logger.info('User: '+user.id+' is being followed: ', userIsFollowing);
-        if (user === loggedInUser || userIsFollowing) {
-            user.isFollowed = true;
-        } else {
-            user.isFollowed = false;
-        }
-    }
-    return user;
+        
+        var userIsFollowing = loggedInUser.following.indexOf(user.id) !== -1 
+            ? true 
+            : false;
+        
+        logger.info('Loggedin user is following: ' + user.id + ' ', userIsFollowing);
+        
+        user.isFollowed = userIsFollowing
+            ? true 
+            : false;
+    } 
+    return user;    
 };
 
 userUtil.createClientUser = function (user, loggedInUser) {

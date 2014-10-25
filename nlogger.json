@@ -1,7 +1,7 @@
 {
-    "color": false,
+    "color": true,
     "level": {
-        "*": "debug",
+        "*": "trace",
         "my-modules/first": "info"
     }
 }
