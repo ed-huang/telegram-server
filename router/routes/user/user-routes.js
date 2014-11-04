@@ -5,6 +5,7 @@ var logger = require('nlogger').logger(module);
 var mailgun = require('../../../mailgun/mailgun-mailserver');
 var md5 = require('MD5');
 var passport = require('../../../passport/passport-authenticate');
+var passportFB = require('../../../passport/passport-facebook');
 var passwordGenerator = require('password-generator');
 var router = require('express').Router();
 var userUtil = require('./user-util');
@@ -27,6 +28,9 @@ router.get('/', function(req, res) {
         break;
     case 'login':
         handleLoginRequest(req, res);
+        break;
+    case 'facebookLogin':
+        handleFacebookLogin(req, res);
         break;
     case 'logout':
         handleLogoutRequest(req, res);
@@ -332,8 +336,13 @@ function handleLoginRequest (req, res) {
             logger.warn('Login error. User not found.');
             return res.status(403).end();
         }
-        
     });
+}
+
+function handleFacebookLogin(req, res) {
+    logger.info('Facebook Login');
+    return res.status(200).end();
+    passportFB.authenticate('facebook');
 }
 
 function handleLogoutRequest(req, res) {
