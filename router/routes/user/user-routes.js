@@ -60,8 +60,11 @@ router.get('/:user_id', function (req, res) {
             return res.status(500).end();
         }
             
-        if(!user) { return res.status(404).end() };
-        return res.send({ 'user': userUtil.createClientUser(user, null) });
+        if(!user) { 
+            logger.error('User params error.');
+            return res.status(404).end() 
+        };
+        return res.send({ 'user': userUtil.createClientUser(user, req.user) });
     });
 });
 
@@ -262,17 +265,19 @@ function handleAuthenticatingRequest (req, res) {
 }
 
 function handleFollowersRequest (req, res) {
-    logger.info('Getting followers for: ', req.query.curUser);
+
     
     var emberArray = [];
     
     User.findOne({ id: req.query.curUser }, function (err, curUser) {
         if (err) return res.status(403).end();
-        
+        logger.info('Getting followers for: ', curUser.id);
+        logger.info('followers: ', curUser.followers);
         User.find({ id: { $in: curUser.followers }}, function (err, followers) {
             if (err) return res.status(403).end();
-
+            logger.info('follwers inside of User: ', followers);
             followers.forEach(function (follower) {
+                logger.info('follower id: ', follower.id);
                 var u = userUtil.createClientUser(follower, req.user);
                 // u = userUtil.setIsFollowed(u, req.user);
                 emberArray.push(u);
