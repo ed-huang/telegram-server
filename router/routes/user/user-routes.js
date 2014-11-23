@@ -279,7 +279,6 @@ function handleFollowersRequest (req, res) {
             followers.forEach(function (follower) {
                 logger.info('follower id: ', follower.id);
                 var u = userUtil.createClientUser(follower, req.user);
-                // u = userUtil.setIsFollowed(u, req.user);
                 emberArray.push(u);
             });
 

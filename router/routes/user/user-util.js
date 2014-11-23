@@ -13,7 +13,7 @@ userUtil.setIsFollowed = function (user, loggedInUser) {
             ? true 
             : false;
         
-        logger.info('Loggedin user is following: ' + user.id + ' ', userIsFollowing);
+        logger.info('The loggedin user is following user \'' + user.id + '\': ', userIsFollowing);
         
         user.isFollowed = userIsFollowing
             ? true 
@@ -28,7 +28,8 @@ userUtil.createClientUser = function (user, loggedInUser) {
     var copy = {
         id: user.id,
         name: user.name,
-        picture: user.picture
+        picture: user.picture,
+        isFollowing: true
     }; 
     if (loggedInUser) {
         return userUtil.setIsFollowed(copy, loggedInUser);
