@@ -28,8 +28,7 @@ userUtil.createClientUser = function (user, loggedInUser) {
     var copy = {
         id: user.id,
         name: user.name,
-        picture: user.picture,
-        isFollowing: true
+        picture: user.picture
     }; 
     if (loggedInUser) {
         return userUtil.setIsFollowed(copy, loggedInUser);
