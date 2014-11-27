@@ -63,7 +63,7 @@ router.post('/', userUtil.ensureAuthenticated, function (req, res) {
 
 router.delete('/:post_id', userUtil.ensureAuthenticated, function (req, res) {
     logger.info('Post delete route.');
-    Post.remove({ _id: req.params.post_id }, function (err) {
+    Post.remove({ _id: req.params.post_id, author: req.user.id }, function (err) {
         if (err) {
             logger.error('Post Remove error: ', err);
             return res.status(404).end();
