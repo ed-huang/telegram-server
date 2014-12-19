@@ -1,3 +1,4 @@
+console.log('post-routes');
 var db = require('../../../database/database');
 var logger = require('nlogger').logger(module);
 var router = require('express').Router();
@@ -35,6 +36,7 @@ router.post('/', userUtil.ensureAuthenticated, function (req, res) {
 
         var post = {
             author: req.body.post.author,
+            original_author: req.body.post.original_author,
             text: req.body.post.text,
             timestamp: req.body.post.timestamp
         };
@@ -49,6 +51,7 @@ router.post('/', userUtil.ensureAuthenticated, function (req, res) {
             var emberPost = {
                 id: post._id,
                 author: req.user.id,
+                original_author: post.original_author,
                 text: post.text,
                 timestamp: post.timestamp
             };
@@ -89,7 +92,8 @@ function getPostsForDashBoard(req, res) {
             posts.forEach(function (post) {
                 var emberPost = {
                     id: post._id,
-                    author: post.author, 
+                    author: post.author,
+                    original_author: post.original_author,
                     text: post.text,
                     timestamp: post.timestamp
                 }
@@ -121,7 +125,8 @@ function getPostsForUserIndex(req, res) {
         posts.forEach(function (post) {
             var emberPost = {
                 id: post._id,
-                author: post.author, 
+                author: post.author,
+                original_author: post.original_author,
                 text: post.text,
                 timestamp: post.timestamp
             }

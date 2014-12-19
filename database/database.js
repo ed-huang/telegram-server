@@ -1,4 +1,4 @@
-//database.js
+console.log('database.js');
 var logger = require('nlogger').logger(module);
 logger.info('load database.js');
 

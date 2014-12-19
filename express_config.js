@@ -1,3 +1,4 @@
+console.log('express_config.js loaded');
 var bodyParser = require('body-parser');
 var cookieParser = require('cookie-parser');
 var passport = require('./passport/passport-authenticate');

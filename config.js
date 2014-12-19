@@ -1,3 +1,4 @@
+console.log('config.js loaded');
 module.exports.DATABASE_NAME = 'test';
 module.exports.HOST_NAME = 'localhost';
 var mailgun = {

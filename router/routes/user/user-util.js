@@ -45,7 +45,7 @@ userUtil.ensureAuthenticated = function (req, res, next) {
         logger.info('isAuthenticated');
         return next();
     } else {
-        return res.status(403);
+        return res.status(403).end();
     }
 };
 
