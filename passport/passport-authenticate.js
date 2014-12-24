@@ -64,6 +64,7 @@ passport.use(new FacebookStrategy({
 // facebook will send back the token and profile
     function(token, refreshToken, profile, done) {
         console.log('facebook strategy callback');
+        done();
     }));
 
 
