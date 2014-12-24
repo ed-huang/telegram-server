@@ -3,10 +3,12 @@ var db = require('./../database/database');
 var User = db.model('User');
 var passport = require('passport');
 var LocalStrategy = require('passport-local').Strategy;
+var FacebookStrategy = require('passport-facebook').Strategy;
 var bcrypt = require('bcrypt');
 var userUtil = require('../router/routes/user/user-util');
+var configAuth = require('./../auth');
 
-passport.use(new LocalStrategy(
+passport.use('local', new LocalStrategy(
     function (username, password, done) {
         logger.info('fnc LocalStrategy - username: ', username);
         
@@ -50,5 +52,21 @@ passport.deserializeUser(function(id, done) {
         done(err, user);
     });
 });
+
+passport.use(new FacebookStrategy({
+
+    // pull in our app id and secret from our auth.js file
+        clientID        : configAuth.facebookAuth.clientID,
+        clientSecret    : configAuth.facebookAuth.clientSecret,
+        callbackURL     : configAuth.facebookAuth.callbackURL
+    },
+
+// facebook will send back the token and profile
+    function(token, refreshToken, profile, done) {
+        console.log('facebook strategy callback');
+    }));
+
+
+
 
 module.exports = passport;

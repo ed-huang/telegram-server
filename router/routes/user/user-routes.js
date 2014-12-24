@@ -345,8 +345,9 @@ function handleLoginRequest (req, res) {
 
 function handleFacebookLogin(req, res) {
     logger.info('Facebook Login');
+    // return res.status(200).end();
+    passport.authenticate('facebook', {scope: 'email'});
     return res.status(200).end();
-    passportFB.authenticate('facebook');
 }
 
 function handleLogoutRequest(req, res) {
