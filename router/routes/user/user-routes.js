@@ -73,6 +73,8 @@ router.get('/logout', function (req, res) {
     return res.status(200).end();
 });
 
+router.get('/auth/facebook', passport.authenticate('facebook'));
+
 router.get('/auth/facebook/callback', function(req, res) {
     logger.info('Getting auth/facebook');
     passport.authenticate('facebook', { successRedirect: '/', failureRedirect: '/login' });
@@ -347,13 +349,6 @@ function handleLoginRequest (req, res) {
             return res.status(403).end();
         }
     });
-}
-
-function handleFacebookLogin(req, res) {
-    logger.info('Facebook Login');
-    // return res.status(200).end();
-    passport.authenticate('facebook');
-    return res.send({ users: {}});
 }
 
 function handleLogoutRequest(req, res) {
