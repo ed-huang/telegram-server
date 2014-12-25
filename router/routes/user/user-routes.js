@@ -5,7 +5,6 @@ var logger = require('nlogger').logger(module);
 var mailgun = require('../../../mailgun/mailgun-mailserver');
 var md5 = require('MD5');
 var passport = require('../../../passport/passport-authenticate');
-var passportFB = require('../../../passport/passport-facebook');
 var passwordGenerator = require('password-generator');
 var router = require('express').Router();
 var userUtil = require('./user-util');
@@ -73,13 +72,11 @@ router.get('/logout', function (req, res) {
     return res.status(200).end();
 });
 
-router.get('/auth/facebook', passport.authenticate('facebook'));
-
-router.get('/auth/facebook/callback', function(req, res) {
-    logger.info('Getting auth/facebook');
-    passport.authenticate('facebook', { successRedirect: '/', failureRedirect: '/login' });
-    res.status(200).end();
+router.get('/auth/facebook', passport.authenticate('facebook'), function(req, res) {
+    logger.info('Redirecting to Facebook');
 });
+
+router.get('/auth/facebook/callback', passport.authenticate('facebook', { successRedirect: '/dashboard', failureRedirect: '/' }));
 
 router.post('/', function (req, res) {
     logger.info('CREATE USER - POST to api/users: ', req.body.id);
